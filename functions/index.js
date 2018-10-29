@@ -44,6 +44,7 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 	const service = req.query.service;
 	const address = req.query.address;
 	const time = req.query.time;
+	const priority = req.query.priority;
 	const promises = [];	
 	const getInstaceIdToSend = admin.database().ref('/users').once('value').then(function(snapshot) {	
 	//return Promise.all(admin.database().ref('/users').once('value')).then(function(snapshot) {	
@@ -55,7 +56,7 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 				Service: service,
 				Address: address,
 				Time: time,
-				shourya: "lala"
+				Priority: priority
 			}
 		};
 		return admin.messaging().sendToDevice(instanceId, payload)
