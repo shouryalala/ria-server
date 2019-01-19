@@ -12,6 +12,28 @@ const admin = require('firebase-admin');
 admin.initializeApp(functions.config().firebase);
 
 
+/*
+* createToken method - accepts mobile number and returns a custom JWT token for authentication
+*/
+exports.createToken = functions.https.onRequest((req, res) => {
+    //fetch mobile number from query
+    const mobile = req.query.mobile;
+    
+    if(mobile !== null) {
+        admin.auth().createCustomToken(mobile)
+            .then(function(customToken) {
+                console.log("Custom Token created successfully! Token: " + customToken);    
+                res.status(200).send(customToken);
+                return 1;
+            })
+            .catch(function(error) {
+                console.log("Custom Token genration failed: " + error);
+            });
+    }
+    end();
+});
+
+
 exports.sendNotification = functions.https.onRequest((req, res) => {
 	const sent_text = req.query.text;
 	const promises = [];	
@@ -37,7 +59,7 @@ exports.sendNotification = functions.https.onRequest((req, res) => {
                     return 0;
                 });
 	});
-
+    end();
 });
 
 exports.sendDataPacket = functions.https.onRequest((req, res) => {
@@ -69,6 +91,7 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
                     return 0;
                 });
 	});
+    end();
 
 });
 
