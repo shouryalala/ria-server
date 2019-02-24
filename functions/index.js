@@ -26,7 +26,6 @@ admin.initializeApp({
   databaseURL: 'https://kanta-6f9f5.firebaseio.com'
 });
 
-
 /*
 * createToken method - accepts mobile number and returns a custom JWT token for authentication
 */
@@ -39,6 +38,7 @@ exports.createToken = functions.https.onRequest((req, res) => {
     if(mobile === null) {        
         mobile = req.body.mobile;
         console.log("Didnt receive mobile in query parameters. Body check reveiles: " + mobile);
+        res.status(550).send();
     }
     
     if(mobile !== null) {
@@ -120,7 +120,147 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 
 });
 
+/**
+ * SENDJOBREQUESTANDEVALUATE
+ * -Triggered on Creation of new Request document
+ * -Fetches fields 
+ * -Gets available assistant
+ * -sends her a request 
+ */
+//better to get address from the packet than another db fetch i guess.
+exports.sendJobRequestAndEvaluate = functions.firestore
+    .document('requests/{requestId}')
+    .onCreate((snap, context) => {
+        console.log("::sendJobRequestAndEvaluate::INVOKED");
+        const requestObj = snap.data();
+        /*
+        assistant should contain:
+        {assistant instance ID, assistant name, assistant ID}
+        */
+        var assistant = getAvailableAssistant(requestObj.address, requestObj.service, requestObj.time, null);
+        console.log("Request Id: "+ requestObj.rId + "\nSelected assistant: " + assistant.name);
 
+        if(!assistant) {
+            console.log("No available maids at the moment.");
+            //TODO
+            return 0;
+        }
+
+        //sendAssitantRequest(requestObj, assistant)
+        return sendAssitantRequest(requestObj, assistant)
+            .then(function(response){
+                if(response === 1) {
+                    console.log("Updating the snapshot's assignee.");
+                    return snap.ref.set({
+                        assignee_id: assistant.ass_id,
+                        asn_response: "NIL"     //Can be set by client
+                    }, {merge: true});
+                }else{
+                    console.log("Recevied error tag from :sendAssistantRequest: method");
+                    return 0;
+                }
+        }, function(error){
+            console.log("Recevied error tag from :sendAssistantRequest: method");
+            return 0;
+        });
+    });
+
+
+    /**
+     * 
+     * @param {rId, service, address, time} request 
+     * @param {name, instanceId, assId} assistant 
+     */
+    var sendAssitantRequest = function(request, assistant) {
+        const payload = {
+            data: {
+                Service: request.service,
+                Address: request.address,
+                Time: request.time
+            }
+        };
+
+        console.log("Attempting to send the request to an available assistant..");
+        //send payload to assistant        
+        return admin.messaging().sendToDevice(assistant.instanceId, payload)
+                .then(function(response) {
+                    console.log("Request sent succesfully.");
+                    setTimeout(() => {
+                        checkRequestStatus(request.rId, assistant.assId);
+                    }, 4*60*1000);
+                    return 1;
+                })
+                .catch(function(error) {
+                    console.log("Request couldnt be sent.");
+                    //TODO
+                    return 0;
+                });
+    }
+
+    /*
+    QUICK ENUM FOR REQUEST STATUSES:
+    UNNASSIGNED: UNA
+    ASSIGNED: ASN
+
+    ASSISTANT_RESPONSES:
+    NIL
+    APPROVED
+    REJECTED
+    */
+
+exports.handleAssistantResponse = functions.firestore
+    .document('request/{requestId}')
+    .onUpdate((change, context) => {
+        console.log("::handleAssistantResponse::INVOKED");
+        const response_after = change.after.asn_response;
+        const response_before = change.before.asn_response;
+        const status_after = change.after.status;
+
+        console.log("response before: " + response_before + " response after: " + response_after);
+
+        //return null if no changes to response
+        console.log("No change to response. Exiting method.");
+        //CASE 1
+        if(status_after === "CONFIRMED" || response_before === response_after) return 0;
+        
+        if(response_before === "NIL") {
+            //CASE 2
+            if(response_after === "ACCEPTED") {
+                console.log("Request accepted. Confirming request and notifying user");
+                //TODO  update assistant object. update request status. notify user
+                return change.ref.set({                    
+                    status: "CONFIRMED"     //looping handled
+                }, {merge: true});           
+            }
+            //CASE 3
+            else if(response_after === "REJECTED") {
+                console.log("Request rejected. Reroute request");
+                //TODO
+                return 0;
+            }
+        }
+        //TODO make sure any other updates to the document are also handled accordingly
+        return 0;
+    });
+
+/**
+ * 
+ * @param {string} address 
+ * @param {string} service 
+ * @param {string} time (in system millis) 
+ * @param {array} exceptions (array of assistants to ommit from availability)
+ * 
+ * return assistant = {name, instanceId, assId}
+ */
+var getAvailableAssistant = function(address, service, time, exceptions) {
+    console.log("::getAvailableAssistant::INVOKED");
+    var dummy = {
+        name: "Sushma",
+        assId: "ADD_IN_BRO",
+        instanceId: "ADD_IN_BRO"
+    };
+    return dummy;
+}
 
 /*
 exports.sendNotification = functions.database.ref('/notifications/messages/{pushId}')
