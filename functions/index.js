@@ -128,17 +128,18 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
  * -sends her a request 
  */
 //better to get address from the packet than another db fetch i guess.
-exports.sendJobRequestAndEvaluate = functions.firestore
+exports.userRequestHandler = functions.firestore
     .document('requests/{requestId}')
     .onCreate((snap, context) => {
-        console.log("::sendJobRequestAndEvaluate::INVOKED");
+        console.log("::userRequestHandler::INVOKED");
         const requestObj = snap.data();
+        const requestId = context.params.requestId;     //get request ID from wildcard
         /*
         assistant should contain:
         {assistant instance ID, assistant name, assistant ID}
         */
         var assistant = getAvailableAssistant(requestObj.address, requestObj.service, requestObj.time, null);
-        console.log("Request Id: "+ requestObj.rId + "\nSelected assistant: " + assistant.name);
+        console.log("Request Id: "+ requestId + "\nSelected assistant: " + assistant.name);
 
         if(!assistant) {
             console.log("No available maids at the moment.");
@@ -147,7 +148,7 @@ exports.sendJobRequestAndEvaluate = functions.firestore
         }
 
         //sendAssitantRequest(requestObj, assistant)
-        return sendAssitantRequest(requestObj, assistant)
+        return sendAssitantRequest(requestId, requestObj, assistant)
             .then(function(response){
                 if(response === 1) {
                     console.log("Updating the snapshot's assignee.");
@@ -166,36 +167,36 @@ exports.sendJobRequestAndEvaluate = functions.firestore
     });
 
 
-    /**
-     * 
-     * @param {rId, service, address, time} request 
-     * @param {name, instanceId, assId} assistant 
-     */
-    var sendAssitantRequest = function(request, assistant) {
-        const payload = {
-            data: {
-                Service: request.service,
-                Address: request.address,
-                Time: request.time
-            }
-        };
+/**
+ * @param {string} requestId
+ * @param {service, address, time} request 
+ * @param {name, instanceId, assId} assistant 
+ */
+var sendAssitantRequest = function(requestId, request, assistant) {
+    const payload = {
+        data: {
+            Service: request.service,
+            Address: request.address,
+            Time: request.time
+        }
+    };
 
-        console.log("Attempting to send the request to an available assistant..");
-        //send payload to assistant        
-        return admin.messaging().sendToDevice(assistant.instanceId, payload)
-                .then(function(response) {
-                    console.log("Request sent succesfully.");
-                    setTimeout(() => {
-                        checkRequestStatus(request.rId, assistant.assId);
-                    }, 4*60*1000);
-                    return 1;
-                })
-                .catch(function(error) {
-                    console.log("Request couldnt be sent.");
-                    //TODO
-                    return 0;
-                });
-    }
+    console.log("Attempting to send the request to an available assistant..");
+    //send payload to assistant        
+    return admin.messaging().sendToDevice(assistant.instanceId, payload)
+            .then(function(response) {
+                console.log("Request sent succesfully.");
+                setTimeout(() => {
+                    checkRequestStatus(requestId, assistant.assId);
+                }, 4*60*1000);
+                return 1;
+            })
+            .catch(function(error) {
+                console.log("Request couldnt be sent.");
+                //TODO
+                return 0;
+            });
+}
 
     /*
     QUICK ENUM FOR REQUEST STATUSES:
@@ -208,20 +209,23 @@ exports.sendJobRequestAndEvaluate = functions.firestore
     REJECTED
     */
 
-exports.handleAssistantResponse = functions.firestore
+exports.assistantResponseHandler = functions.firestore
     .document('request/{requestId}')
     .onUpdate((change, context) => {
-        console.log("::handleAssistantResponse::INVOKED");
+        console.log("::assistantResponseHandler::INVOKED");
         const response_after = change.after.asn_response;
         const response_before = change.before.asn_response;
         const status_after = change.after.status;
+        const requestId = context.params.requestId;
 
-        console.log("response before: " + response_before + " response after: " + response_after);
-
-        //return null if no changes to response
-        console.log("No change to response. Exiting method.");
+        console.log("RequestId: " + requestId + "\nResponse before: " + response_before + " Response after: " + response_after);        
+        
         //CASE 1
-        if(status_after === "CONFIRMED" || response_before === response_after) return 0;
+        if(status_after === "CONFIRMED" || response_before === response_after) {
+            //exit if no changes to response or if request already confirmed
+            console.log("No change to response || status is confirmed. Exiting method.");
+            return 0;
+        }
         
         if(response_before === "NIL") {
             //CASE 2
@@ -229,7 +233,7 @@ exports.handleAssistantResponse = functions.firestore
                 console.log("Request accepted. Confirming request and notifying user");
                 //TODO  update assistant object. update request status. notify user
                 return change.ref.set({                    
-                    status: "CONFIRMED"     //looping handled
+                    status: "ASN"     //looping handled
                 }, {merge: true});           
             }
             //CASE 3
@@ -260,6 +264,31 @@ var getAvailableAssistant = function(address, service, time, exceptions) {
         instanceId: "ADD_IN_BRO"
     };
     return dummy;
+}
+
+/**
+ * 
+ * @param {string} rId (request ID)
+ * @param {string} assId (assistant ID)
+ * 
+ * method checks whether assistant has responded to request or not after waiting for a period of time. 
+ * -if not, restart request handling process
+ */
+var checkRequestStatus = function(rId, assId) {
+    console.log("::checkRequestStatus::INVOKED");
+    admin.firestore().collection('requests').doc(rId).get().then(doc => {        
+        if(doc.assignee_id === assId && doc.asn_response === "NIL") {
+            //the assigned assistant is still the same and the her response is still nil
+            //Houston we have a problem
+            console.log("Request hasnt been responded to by assistant. Required to be rerouted");
+            //TODO      
+        }
+        return 1;
+    })
+    .catch(error => {
+        console.log("Error in retrieving record");
+        return 0;
+    });
 }
 
 /*
