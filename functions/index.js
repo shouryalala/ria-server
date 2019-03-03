@@ -58,7 +58,7 @@ exports.createToken = functions.https.onRequest((req, res) => {
     //TODO add end() somehow    
 });
 
-
+//BOILERPLATE NOTIFICATION
 exports.sendNotification = functions.https.onRequest((req, res) => {
 	const sent_text = req.query.text;
 	const promises = [];	
@@ -87,6 +87,8 @@ exports.sendNotification = functions.https.onRequest((req, res) => {
     end();
 });
 
+
+//BOILERPLATE FUNCTION
 exports.sendDataPacket = functions.https.onRequest((req, res) => {
 	const service = req.query.service;
 	const address = req.query.address;
@@ -120,6 +122,40 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 
 });
 
+
+//BOILERPLATE FUNCTION
+exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
+	const service = req.query.service;
+	const address = req.query.address;
+	const time = req.query.time;
+	//const priority = req.query.priority;
+    const promises = [];	
+    const instanceId = "eI_G6yeMYKM:APA91bEFa8OHe7l67ZO8Es5zgVVeIUKo6ok_BSg-MmB1H5YDBZYTt8_BOM_IwlT1aH6ilTWHsvFrUKglD3ImXrrajS4x0J6C0i26_xZCgMKAOmkwTMajuKFYDPkj2fFrIIMx0tduhwMW";
+	
+	console.log('sending data packet to client: ' + instanceId);
+
+    const payload = {
+        data: {
+            Service: service,
+            Address: address,
+            Time: time,
+            Command: WRDP
+            //Priority: priority
+        }
+    };
+    return admin.messaging().sendToDevice(instanceId, payload)
+            .then(function (response) {
+                console.log("Successfully sent message:", response);
+                return 1;
+            })
+            .catch(function (error) {
+                console.log("Error sending message:", error);
+                return 0;
+            });
+});
+
+
+
 /**
  * SENDJOBREQUESTANDEVALUATE
  * -Triggered on Creation of new Request document
@@ -146,6 +182,7 @@ exports.userRequestHandler = functions.firestore
             //TODO
             return 0;
         }
+        //TODO NO NULL CHECKS ANYWHERE
 
         //sendAssitantRequest(requestObj, assistant)
         return sendAssitantRequest(requestId, requestObj, assistant)
@@ -175,9 +212,11 @@ exports.userRequestHandler = functions.firestore
 var sendAssitantRequest = function(requestId, request, assistant) {
     const payload = {
         data: {
+            RID: requestId,
             Service: request.service,
             Address: request.address,
-            Time: request.time
+            Time: request.time,
+            Command: "WRDP"
         }
     };
 
