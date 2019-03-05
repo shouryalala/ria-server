@@ -24,7 +24,13 @@ admin.initializeApp({
 
   databaseURL: 'https://kanta-6f9f5.firebaseio.com'
 });
+//fix timestamps for firestore
+admin.firestore().settings({timestampsInSnapshots: true});
 
+//Firebase collections
+const COLN_USERS = "users";
+const COLN_ASSISTANTS = "assistants";
+const COL_REQUEST = "requests";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -34,10 +40,12 @@ const AST_RESPONSE_NIL = "NIL";
 const AST_RESPONSE_ACCEPT = "ACCEPT";
 const AST_RESPONSE_REJECT = "REJECT";
 const COMMAND_WORK_REQUEST = "WRDP";
-//Firebase collections
-const COLN_USERS = "users";
-const COLN_ASSISTANTS = "assistants";
-const COL_REQUEST = "requests";
+//Service decodes
+const SERVICE_CLEANING = "Cx";
+const SERVICE_DUSTING = "Dx";
+const SERVICE_UTENSILS = "Ux";
+const SERVICE_CHORE = "Chx";
+const SERVICE_CLEANING_UTENSILS = "CUx";
 
 
 /*
@@ -171,27 +179,31 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
 
 
 exports.createDummyRequest = functions.https.onRequest((req, res) => {
+    console.log("::createDummyRequest::INVOKED");    
     var packet = {
-        address:"sexy legs",
-        asn_response: "NIL",
-        service: "CLN",
+        address:req.query.address,
+        asn_response: AST_RESPONSE_NIL,
+        service: req.query.service,      //SERVICE_CLEANING
         society_id: "we dont need no education",
-        status: "UNA",
+        status: REQ_STATUS_UNASSIGNED,
         user_id: "9986643444",
-        requested_time: "12:32"
+        requested_time: req.query.time,     //in secs since 12
+        timestamp: Date.now()
     }
 
     return admin.firestore().collection(COL_REQUEST).add(packet).then(() => {
+        console.log("Dummy request created!");
         return res.status(200).send("Created automagically!");
     })
     .catch((error) => {
+        console.error("Error creating dummy request: " + error);
         return res.status(500).send("Error: " + error);
     });
 });
 
 
 /**
- * SENDJOBREQUESTANDEVALUATE
+ * USERREQUESTHANDLER
  * -Triggered on Creation of new Request document
  * -Fetches fields 
  * -Gets available assistant
@@ -204,6 +216,7 @@ exports.userRequestHandler = functions.firestore
         console.log("::userRequestHandler::INVOKED");
         const requestObj = snap.data();
         const requestId = context.params.requestId;     //get request ID from wildcard
+        console.log("Request ID: " + requestId);
         
         return getAvailableAssistant(requestObj.address, requestObj.service, requestObj.time, null)
             .then(function(assistant){
@@ -217,11 +230,8 @@ exports.userRequestHandler = functions.firestore
                     return 0;
                 }
                
-                console.log("Request Id: "+ requestId + "\nSelected assistant: " + assistant.name);
-                
-                //TODO NO NULL CHECKS ANYWHERE
-        
-                //sendAssitantRequest(requestObj, assistant)
+                console.log("Assistant details obtained: " + assistant.name + "\nSending assitant request..");            
+
                 return sendAssitantRequest(requestId, requestObj, assistant)
                     .then(function(response){
                         if(response === 1) {
@@ -231,11 +241,11 @@ exports.userRequestHandler = functions.firestore
                                 asn_response: "NIL"     //Can be set by client
                             }, {merge: true});
                         }else{
-                            console.log("Recevied error tag from :sendAssistantRequest: method");
+                            console.error("Recevied error tag from :sendAssistantRequest: method");
                             return 0;
                         }
                 }, function(error){
-                    console.log("Recevied error tag from :sendAssistantRequest: method" + error);
+                    console.error("Recevied error tag from :sendAssistantRequest: method: " + error);
                     return 0;
                 });
 
@@ -249,69 +259,66 @@ exports.userRequestHandler = functions.firestore
  * @param {name, instanceId, assId} assistant 
  */
 var sendAssitantRequest = function(requestId, request, assistant) {
+    console.log("::sendAssitantRequest::INVOKED");    
     const payload = {
         data: {
             RID: requestId,
             Service: request.service,
             Address: request.address,
-            Time: request.requested_time,
+            Time: '' + request.requested_time,      //cant send number
             Command: COMMAND_WORK_REQUEST
         }
     };
 
-    console.log("Attempting to send the request to an available assistant..");
+    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant.assId);
     //send payload to assistant        
     return admin.messaging().sendToDevice(assistant.clientToken, payload)
             .then(function(response) {
-                console.log("Request sent succesfully.");
+                console.log("Request sent succesfully! Request ID: " + requestId);
                 setTimeout(() => {
+                    console.log("Invoking routine Request status check for requestId: " + requestId);
                     checkRequestStatus(requestId, assistant.assId);
                 }, 2*60*1000);
                 return 1;
             })
             .catch(function(error) {
-                console.log("Request couldnt be sent." + error);
+                console.error("Request couldnt be sent: Request ID: " + requestId + "\n" + error);
                 //TODO
                 return 0;
             });
 }
 
-    /*
-    QUICK ENUM FOR REQUEST STATUSES:
-    UNNASSIGNED: UNA
-    ASSIGNED: ASN
-
-    ASSISTANT_RESPONSES:
-    NIL
-    APPROVED
-    REJECTED
-    */
-
 //BE SUPER CAREFUL OF SELF LOOPING
 exports.assistantResponseHandler = functions.firestore
-    .document('request/{requestId}')
+    .document('requests/{requestId}')
     .onUpdate((change, context) => {
         console.log("::assistantResponseHandler::INVOKED");
-        const response_after = change.after.asn_response;
-        const response_before = change.before.asn_response;
-        const status_after = change.after.status;
-        const requestId = context.params.requestId;
-
-        console.log("RequestId: " + requestId + "\nResponse before: " + response_before + " Response after: " + response_after);        
-        
-        //CASE 1
-        if(status_after === REQ_STATUS_ASSIGNED || response_before === response_after) {
-            //exit if no changes to response or if request already confirmed
-            console.log("No change to response || status is confirmed. Exiting method.");
+        const after_data = change.after.data();
+        const status_after = after_data.status;
+        if(status_after === REQ_STATUS_ASSIGNED) {
+            //probably recalled due to status update. exit asap
+            console.log("status is confirmed. Exiting method");
             return 0;
         }
-        
+
+        const prev_data = change.before.data();              
+        const response_before = prev_data.asn_response;
+        const response_after = after_data.asn_response;        
+        const requestId = context.params.requestId;
+
+        console.log("RequestId: " + requestId + "\nResponse before: " + response_before + " Response after: " + response_after);                
+        //CASE 1
+        if(response_before === response_after) {
+            //exit if no changes to response or if request already confirmed
+            console.log("No change to response. Exiting method.");
+            return 0;
+        }        
         if(response_before === AST_RESPONSE_NIL) {
             //CASE 2
             if(response_after === AST_RESPONSE_ACCEPT) {
                 console.log("Request accepted. Confirming request and notifying user");
                 //TODO  update assistant object. update request status. notify user
-                return change.ref.set({                    
+                return change.after.ref.set({                    
                     status: REQ_STATUS_ASSIGNED     //looping handled
                 }, {merge: true});
             }
@@ -327,7 +334,7 @@ exports.assistantResponseHandler = functions.firestore
     });
 
 /**
- * 
+ * GETAVAILABLEASSISTANT
  * @param {string} address 
  * @param {string} service 
  * @param {string} time (in system millis) 
@@ -352,13 +359,13 @@ var getAvailableAssistant = function(address, service, time, exceptions) {
         return assistant;
     })
     .catch(error => {
-        console.log("Error fetching record." + error);
+        console.error("Error fetching record: " + error);
         return null;
     });   
 }
 
 /**
- * 
+ * CHECKREQUESTSTATUS
  * @param {string} rId (request ID)
  * @param {string} assId (assistant ID)
  * 
@@ -367,71 +374,35 @@ var getAvailableAssistant = function(address, service, time, exceptions) {
  */
 var checkRequestStatus = function(rId, assId) {
     console.log("::checkRequestStatus::INVOKED");
-    admin.firestore().collection(COL_REQUEST).doc(rId).get().then(doc => {        
-        if(doc.assignee_id !== null && doc.asn_response != null && doc.assignee_id === assId && doc.asn_response === AST_RESPONSE_NIL) {
-            //the assigned assistant is still the same and the her response is still nil
-            //Houston we have a problem
-            console.log("Request hasnt been responded to by assistant. Required to be rerouted");
-            //TODO      
-        }else{
-            console.log("Fetched record, condition not satisfied.");
+    admin.firestore().collection(COL_REQUEST).doc(rId).get().then(doc => {
+        const aDoc = doc.data();
+        if(aDoc.assignee_id === null && aDoc.asn_response === null) {
+            console.error("Request has no assignee yet!");
+            return 0;
         }
-        return 1;
+        if(aDoc.assignee_id === assId) {
+            if(aDoc.asn_response === AST_RESPONSE_NIL){
+                //the assigned assistant is still the same and the her response is still nil
+                //Houston we have a problem
+                console.log("Request: " + rId + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");
+                return 0;
+                //TODO
+            }else if(aDoc.asn_response === AST_RESPONSE_ACCEPT){
+                //TODO maybe verify if status is assigned yet or not. not reqd
+                console.log("checkRequestStatus verified request: " + rId + " All in order.");
+                return 1;
+            }else{
+                //should never happen. corner case when request is in process of being rerouted and gets caught by this method
+                console.error("Request: " + rId + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.");
+                return 0;
+            }
+        }else{
+            console.log("checkRequestStatus for RequestId: " + rId + ", AssistantId: " + assId + " outdated. Request reassigned.");
+            return 1;
+        }
     })
     .catch(error => {
         console.log("Error in retrieving record");
         return 0;
     });
 }
-
-/*
-exports.sendNotification = functions.database.ref('/notifications/messages/{pushId}')
-    .onWrite(event => {
-        const message = event.data.current.val();
-        const senderUid = message.from;
-        const receiverUid = message.to;
-        const promises = [];
-
-        if (senderUid == receiverUid) {
-            //if sender is receiver, don't send notification
-            promises.push(event.data.current.ref.remove());
-            return Promise.all(promises);
-        }
-
-        const getInstanceIdPromise = admin.database().ref(`/users/${receiverUid}/instanceId`).once('value');
-        const getSenderUidPromise = admin.auth().getUser(senderUid);
-
-        return Promise.all([getInstanceIdPromise, getSenderUidPromise]).then(results => {
-            const instanceId = results[0].val();
-            const sender = results[1];
-            console.log('notifying ' + receiverUid + ' about ' + message.body + ' from ' + senderUid);
-
-            const payload = {
-                notification: {
-                    title: sender.displayName,
-                    body: message.body,
-                    icon: sender.photoURL
-                }
-            };
-
-            admin.messaging().sendToDevice(instanceId, payload)
-                .then(function (response) {
-                    console.log("Successfully sent message:", response);
-                })
-                .catch(function (error) {
-                    console.log("Error sending message:", error);
-                });
-        });
-});*/
-
-/*
-//PROMISE SUCCESSON AND REJECTION
-
-ref.child('blogposts').child(id).once('value').then(function(snapshot) {
-  // The Promise was "fulfilled" (it succeeded).
-  renderBlog(snapshot.val());
-}, function(error) {
-  // The Promise was rejected.
-  console.error(error);
-});
-*/
