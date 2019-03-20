@@ -31,6 +31,7 @@ admin.firestore().settings({timestampsInSnapshots: true});
 const COLN_USERS = "users";
 const COLN_ASSISTANTS = "assistants";
 const COL_REQUEST = "requests";
+const COLN_VISITS = "visits";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -46,6 +47,12 @@ const SERVICE_DUSTING = "Dx";
 const SERVICE_UTENSILS = "Ux";
 const SERVICE_CHORE = "Chx";
 const SERVICE_CLEANING_UTENSILS = "CUx";
+//Visit decodes
+const VISIT_STATUS_FAILED = -1;
+const VISIT_STATUS_CANCELLED = 0;
+const VISIT_STATUS_COMPLETED = 1;
+const VISIT_STATUS_ONGOING = 2;
+const VISIT_STATUS_UPCOMING = 3;
 
 
 /*
@@ -150,9 +157,7 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
 	const time = req.query.time;
 	//const priority = req.query.priority;
     const promises = [];
-
-
-
+    
     const instanceId = "eI_G6yeMYKM:APA91bEFa8OHe7l67ZO8Es5zgVVeIUKo6ok_BSg-MmB1H5YDBZYTt8_BOM_IwlT1aH6ilTWHsvFrUKglD3ImXrrajS4x0J6C0i26_xZCgMKAOmkwTMajuKFYDPkj2fFrIIMx0tduhwMW";
 	
 	console.log('sending data packet to client: ' + instanceId);
@@ -177,21 +182,39 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
             });
 });
 
+exports.setArrayToDocument = functions.https.onRequest((req, res) => {
+    var docRef = admin.firestore().collection(COL_REQUEST).doc('hjZtyi7hvTjv79M2xVl0');
+    var song = req.query.song;
+    return docRef.update({
+        prateek_kuhad: admin.firestore.FieldValue.arrayUnion(song)        
+    })
+    .then(x => {
+        console.log("Added to document fields. go check");
+        return res.status(200).send('Done.');
+    })
+    .catch(error => {
+        console.log("Whoops:  " + error);
+        return res.status(500).send('error');
+    });
+});
 
 exports.createDummyRequest = functions.https.onRequest((req, res) => {
-    console.log("::createDummyRequest::INVOKED");    
+    console.log("::createDummyRequest::INVOKED");
+    const yearDoc = "2019";
+    const monthSubCollection = "MAR"; 
     var packet = {
-        address:req.query.address,
-        asn_response: AST_RESPONSE_NIL,
-        service: req.query.service,      //SERVICE_CLEANING
-        society_id: "we dont need no education",
-        status: REQ_STATUS_UNASSIGNED,
         user_id: "9986643444",
-        requested_time: req.query.time,     //in secs since 12
+        service: req.query.service,
+        date: new Date().getDate(),
+        address:req.query.address,
+        society_id: "abx",
+        asn_response: AST_RESPONSE_NIL,        
+        status: REQ_STATUS_UNASSIGNED,
+        req_time: parseInt(req.query.time),     //in secs since 12
         timestamp: Date.now()
     }
 
-    return admin.firestore().collection(COL_REQUEST).add(packet).then(() => {
+    return admin.firestore().collection(COL_REQUEST).doc(yearDoc).collection(monthSubCollection).add(packet).then(() => {
         console.log("Dummy request created!");
         return res.status(200).send("Created automagically!");
     })
@@ -211,14 +234,14 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
  */
 //better to get address from the packet than another db fetch i guess.
 exports.userRequestHandler = functions.firestore
-    .document('requests/{requestId}')
+    .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onCreate((snap, context) => {
         console.log("::userRequestHandler::INVOKED");
         const requestObj = snap.data();
         const requestId = context.params.requestId;     //get request ID from wildcard
         console.log("Request ID: " + requestId);
         
-        return getAvailableAssistant(requestObj.address, requestObj.service, requestObj.time, null)
+        return getAvailableAssistant(requestObj.address, requestObj.service, requestObj.req_time, null)
             .then(function(assistant){
                 /*
                     assistant should contain: 
@@ -237,7 +260,7 @@ exports.userRequestHandler = functions.firestore
                         if(response === 1) {
                             console.log("Updating the snapshot's assignee.");
                             return snap.ref.set({
-                                assignee_id: assistant.assId,
+                                asn_id: assistant.assId,
                                 asn_response: "NIL"     //Can be set by client
                             }, {merge: true});
                         }else{
@@ -265,7 +288,7 @@ var sendAssitantRequest = function(requestId, request, assistant) {
             RID: requestId,
             Service: request.service,
             Address: request.address,
-            Time: '' + request.requested_time,      //cant send number
+            Time: '' + request.req_time,      //cant send number
             Command: COMMAND_WORK_REQUEST
         }
     };
@@ -288,8 +311,54 @@ var sendAssitantRequest = function(requestId, request, assistant) {
             });
 }
 
-//BE SUPER CAREFUL OF SELF LOOPING
 exports.assistantResponseHandler = functions.firestore
+    .document('requests/{yearDoc}/{monthSubcollection}/{requestId}')
+    .onUpdate((change, context) => {
+        console.log("::assistantResponseHandler::INVOKED");
+        const prev_data = change.before.data();
+        const after_data = change.after.data();
+        
+        //explicity check each condition before creating visit obj
+        if(prev_data.asn_response !== AST_RESPONSE_ACCEPT && prev_data.status === REQ_STATUS_UNASSIGNED &&
+            after_data.asn_response === AST_RESPONSE_ACCEPT && after_data.status === REQ_STATUS_ASSIGNED) {
+            console.log("assistant accepted and assigned request. Creating visit obj");
+            //TODO const end_time = getServiceEndTime
+            const yearDocId = context.params.yearDoc;
+            const subCollectionId = context.params.monthSubcollection;
+            const requestDocId = context.params.requestId;
+            var visitObj = {
+                user_id: after_data.user_id,
+                ass_id: after_data.asn_id,
+                date: after_data.date,
+                service: after_data.service,
+                address: after_data.address,
+                society_id: after_data.society_id,
+                req_st_time: after_data.req_time,                
+                status: VISIT_STATUS_UPCOMING
+            }
+            return admin.firestore().collection(COLN_VISITS).doc(yearDocId).collection(subCollectionId).add(visitObj).then(() => {
+                console.log("Created initial Visit object for requestID: " + requestDocId);                
+                //TODO inform user that the request was successful
+                return res.status(200).send("VISIT me in heaven!");
+            })
+            .catch((error) => {
+                console.log("Error creating visit obj: " + error);
+                return res.status(500).send("VISIT me in hell");
+            });
+        }
+
+        else if(prev_data.asn_response === AST_RESPONSE_NIL && prev_data.status === REQ_STATUS_UNASSIGNED &&
+            after_data.asn_response === AST_RESPONSE_REJECT && after.status !== REQ_STATUS_ASSIGNED){
+            //Log rejection and reroute request
+            console.log("Assistant rejected response. Logging rejection and reroute request");
+            //TODO
+            return res.status(200).send("Request rejected");
+        }
+        return res.status(200).send("All okay. no assitant code block triggered");
+    });
+
+//BE SUPER CAREFUL OF SELF LOOPING
+/*exports.assistantResponseHandler = functions.firestore
     .document('requests/{requestId}')
     .onUpdate((change, context) => {
         console.log("::assistantResponseHandler::INVOKED");
@@ -331,7 +400,7 @@ exports.assistantResponseHandler = functions.firestore
         }
         //TODO make sure any other updates to the document are also handled accordingly
         return 0;
-    });
+    });*/
 
 /**
  * GETAVAILABLEASSISTANT
@@ -376,11 +445,11 @@ var checkRequestStatus = function(rId, assId) {
     console.log("::checkRequestStatus::INVOKED");
     admin.firestore().collection(COL_REQUEST).doc(rId).get().then(doc => {
         const aDoc = doc.data();
-        if(aDoc.assignee_id === null && aDoc.asn_response === null) {
+        if(aDoc.asn_id === null && aDoc.asn_response === null) {
             console.error("Request has no assignee yet!");
             return 0;
         }
-        if(aDoc.assignee_id === assId) {
+        if(aDoc.asn_id === assId) {
             if(aDoc.asn_response === AST_RESPONSE_NIL){
                 //the assigned assistant is still the same and the her response is still nil
                 //Houston we have a problem
