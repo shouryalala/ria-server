@@ -32,6 +32,7 @@ const COLN_USERS = "users";
 const COLN_ASSISTANTS = "assistants";
 const COL_REQUEST = "requests";
 const COLN_VISITS = "visits";
+const COLN_TIMETABLE = "timetable";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -53,7 +54,10 @@ const VISIT_STATUS_CANCELLED = 0;
 const VISIT_STATUS_COMPLETED = 1;
 const VISIT_STATUS_ONGOING = 2;
 const VISIT_STATUS_UPCOMING = 3;
-
+//
+const dummy1 = 'bhenbhaibhenbhai';
+const dummy2 = 'acxacxsexsexsex';
+const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
 
 /*
 * createToken method - accepts mobile number and returns a custom JWT token for authentication
@@ -87,6 +91,7 @@ exports.createToken = functions.https.onRequest((req, res) => {
     //TODO add end() somehow    
 });
 
+//************ Dummy Methods ********************************
 //BOILERPLATE NOTIFICATION
 exports.sendNotification = functions.https.onRequest((req, res) => {
 	const sent_text = req.query.text;
@@ -183,10 +188,15 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
 });
 
 exports.setArrayToDocument = functions.https.onRequest((req, res) => {
-    var docRef = admin.firestore().collection(COL_REQUEST).doc('hjZtyi7hvTjv79M2xVl0');
+    var docRef = admin.firestore().collection(COLN_TIMETABLE).doc('2019_z23').collection('MAR').doc('cAfdxLvdU4cJcfVxNVAA');
     var song = req.query.song;
     return docRef.update({
-        prateek_kuhad: admin.firestore.FieldValue.arrayUnion(song)        
+        t00: [dummy1, dummy2, dummy3],
+        t10: [dummy2, dummy3],
+        t20: [dummy2, dummy3],
+        t30: [dummy2, dummy3],
+        t40: [dummy2],
+        t50: [dummy2]
     })
     .then(x => {
         console.log("Added to document fields. go check");
@@ -224,6 +234,18 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
     });
 });
 
+exports.getTimetable = functions.https.onRequest((req, res) => {
+    return getAvailableAssistant2('abc','MAR',23,58200,58800,null,null).then(function(response){
+        if(response === 1) {
+            console.log("Method ran succesfully");
+            return res.status(200).send("SUCCESS");
+        }else{
+            console.log("Method failed");
+            return res.status(500).send("BOOO");
+        }
+    });
+});
+//************************************************************
 
 /**
  * USERREQUESTHANDLER
@@ -275,42 +297,12 @@ exports.userRequestHandler = functions.firestore
             });       
     });
 
-
 /**
- * @param {string} requestId
- * @param {service, address, time} request 
- * @param {name, instanceId, assId} assistant 
+ * ASSISTANTRESPONSEHANDLER
+ * - Triggered when assistant responds to request
+ * - creates a visit object if request approved
+ * - restarts search for an assistant if refused by assistant
  */
-var sendAssitantRequest = function(requestId, request, assistant) {
-    console.log("::sendAssitantRequest::INVOKED");    
-    const payload = {
-        data: {
-            RID: requestId,
-            Service: request.service,
-            Address: request.address,
-            Time: '' + request.req_time,      //cant send number
-            Command: COMMAND_WORK_REQUEST
-        }
-    };
-
-    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant.assId);
-    //send payload to assistant        
-    return admin.messaging().sendToDevice(assistant.clientToken, payload)
-            .then(function(response) {
-                console.log("Request sent succesfully! Request ID: " + requestId);
-                setTimeout(() => {
-                    console.log("Invoking routine Request status check for requestId: " + requestId);
-                    checkRequestStatus(requestId, assistant.assId);
-                }, 2*60*1000);
-                return 1;
-            })
-            .catch(function(error) {
-                console.error("Request couldnt be sent: Request ID: " + requestId + "\n" + error);
-                //TODO
-                return 0;
-            });
-}
-
 exports.assistantResponseHandler = functions.firestore
     .document('requests/{yearDoc}/{monthSubcollection}/{requestId}')
     .onUpdate((change, context) => {
@@ -349,7 +341,7 @@ exports.assistantResponseHandler = functions.firestore
 
         else if(prev_data.asn_response === AST_RESPONSE_NIL && prev_data.status === REQ_STATUS_UNASSIGNED &&
             after_data.asn_response === AST_RESPONSE_REJECT && after.status !== REQ_STATUS_ASSIGNED){
-            //Log rejection and reroute request
+            //Log/penalize rejection and reroute request
             console.log("Assistant rejected response. Logging rejection and reroute request");
             //TODO
             return res.status(200).send("Request rejected");
@@ -357,50 +349,41 @@ exports.assistantResponseHandler = functions.firestore
         return res.status(200).send("All okay. no assitant code block triggered");
     });
 
-//BE SUPER CAREFUL OF SELF LOOPING
-/*exports.assistantResponseHandler = functions.firestore
-    .document('requests/{requestId}')
-    .onUpdate((change, context) => {
-        console.log("::assistantResponseHandler::INVOKED");
-        const after_data = change.after.data();
-        const status_after = after_data.status;
-        if(status_after === REQ_STATUS_ASSIGNED) {
-            //probably recalled due to status update. exit asap
-            console.log("status is confirmed. Exiting method");
-            return 0;
+/**
+ * SENDASSISTANTRESPONSE
+ * @param {string} requestId
+ * @param {service, address, time} request 
+ * @param {name, instanceId, assId} assistant 
+ */
+var sendAssitantRequest = function(requestId, request, assistant) {
+    console.log("::sendAssitantRequest::INVOKED");    
+    const payload = {
+        data: {
+            RID: requestId,
+            Service: request.service,
+            Address: request.address,
+            Time: String(request.req_time),      //cant send number
+            Command: COMMAND_WORK_REQUEST
         }
+    };
 
-        const prev_data = change.before.data();              
-        const response_before = prev_data.asn_response;
-        const response_after = after_data.asn_response;        
-        const requestId = context.params.requestId;
-
-        console.log("RequestId: " + requestId + "\nResponse before: " + response_before + " Response after: " + response_after);                
-        //CASE 1
-        if(response_before === response_after) {
-            //exit if no changes to response or if request already confirmed
-            console.log("No change to response. Exiting method.");
-            return 0;
-        }        
-        if(response_before === AST_RESPONSE_NIL) {
-            //CASE 2
-            if(response_after === AST_RESPONSE_ACCEPT) {
-                console.log("Request accepted. Confirming request and notifying user");
-                //TODO  update assistant object. update request status. notify user
-                return change.after.ref.set({                    
-                    status: REQ_STATUS_ASSIGNED     //looping handled
-                }, {merge: true});
-            }
-            //CASE 3
-            else if(response_after === AST_RESPONSE_REJECT) {
-                console.log("Request rejected. Reroute request");
+    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant.assId);
+    //send payload to assistant        
+    return admin.messaging().sendToDevice(assistant.clientToken, payload)
+            .then(function(response) {
+                console.log("Request sent succesfully! Request ID: " + requestId);
+                setTimeout(() => {
+                    console.log("Invoking routine Request status check for requestId: " + requestId);
+                    checkRequestStatus(requestId, assistant.assId);
+                }, 2*60*1000);
+                return 1;
+            })
+            .catch(function(error) {
+                console.error("Request couldnt be sent: Request ID: " + requestId + "\n" + error);
                 //TODO
                 return 0;
-            }
-        }
-        //TODO make sure any other updates to the document are also handled accordingly
-        return 0;
-    });*/
+            });
+}
 
 /**
  * GETAVAILABLEASSISTANT
@@ -431,6 +414,102 @@ var getAvailableAssistant = function(address, service, time, exceptions) {
         console.error("Error fetching record: " + error);
         return null;
     });   
+}
+
+var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
+    console.log("::getAvailableAssistant::INVOKED");
+    console.log("Params: {date:" + date + " ,st_time:" + st_time + ",en_time:" + en_time);
+    const docId = '2019_z23';
+    var st_time_obj = decodeHourMinFromTime(st_time);
+    var en_time_obj = decodeHourMinFromTime(en_time);
+    //var slots = getSlotCount(st_hour, en_hour, st_min, en_min);
+
+    if(forceAssistant) {
+        console.log("Fetching schedule and available slot for only assistant: " + forceAssistant);
+        //TODO
+        return 0;
+    }
+    return admin.firestore().collection(COLN_TIMETABLE).doc(docId).get().then(docSnapshot => {
+        var assistant_list = docSnapshot.data();
+        var assistants = [];
+        for(const key in assistant_list) {
+            console.log("ID: " + key + " -> " + assistant_list[key]);
+            assistants.push(key);
+        }        
+        var ttRef = admin.firestore().collection(COLN_TIMETABLE).doc(docId).collection(monthId);
+        var query = ttRef;
+        if(st_time_obj.hour === en_time_obj.hour) {
+            query = ttRef.where("date", "==", date).where("hour", "==", st_time_obj.hour)    
+        }else{
+            query = ttRef.where("date", "==", date).where("hour", ">=", st_time_obj.hour).where("hour", "<=", en_time_obj.hour);
+        }
+        return query.get().then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                console.log("Received docId: " + doc.id + " -> DocData: " + doc.data().date);
+                const docDetails = doc.data();
+                var asMap = [];
+                for(var i=0; i<assistants.length; i++) {
+                    for(var j=0; j<6; j++) {
+                        console.log("Inside loop: i:" + i + ", j: " + j);
+                        if(docDetails[getTTFieldName(j)]){
+                            console.log("Field name for j:" + j + " = " + getTTFieldName(j));
+                            console.log("Doc Details for j: " + j + " = " + docDetails['t00']);
+                            asMap[i][j] = false;
+                            //!docDetails[getTTFieldName(j)].includes(assistants[i]);
+                        }else{
+                            asMap[i][j] = true;
+                        }
+                    }
+                }                
+                console.log(docDetails['t10']);
+                // docDetails.t10.forEach(assistant => {
+                //     console.log("array element: " + assistant);
+                // });
+                console.log('Boolean map: \n' + asMap);               
+            });
+            return 1;
+        }).catch(error => {
+            console.log("Error occured: " + error);
+            return 0;
+        });
+    }).catch(error => {
+        console.error("Failed to fetch assitant details: " + error);
+        return 0;
+    });   
+}
+
+var decodeHourMinFromTime = function(time) {
+    if(isNaN(time)){   
+        console.error("Received time is not a number");
+        time = parseInt(time, 10);
+    }
+    var hr =  Math.trunc(time/3600);
+    var prod = time/60;
+    var min_raw = prod%60;
+    console.log("Decoded time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
+    //round minutes to nearest 10 if not done already
+    var min_trunc = Math.round(min_raw/10);    
+    var mn = min_trunc*10;
+    if(min_trunc === 60) {
+        hr += 1;
+        mn = 0;    
+    }
+    console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
+    //TODO Can hour ever be 24?
+    var time_decoded = {hour:hr,min:mn};
+    return time_decoded;
+}
+
+var getTTFieldName = function(n){
+    switch(n) {
+        case 0: return 't00';
+        case 1: return 't10';
+        case 2: return 't20';
+        case 3: return 't30';
+        case 4: return 't40';
+        case 5: return 't50';
+        default: return 't00';
+    }
 }
 
 /**
