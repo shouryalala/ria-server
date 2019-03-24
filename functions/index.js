@@ -188,15 +188,13 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
 });
 
 exports.setArrayToDocument = functions.https.onRequest((req, res) => {
-    var docRef = admin.firestore().collection(COLN_TIMETABLE).doc('2019_z23').collection('MAR').doc('cAfdxLvdU4cJcfVxNVAA');
+    var docRef = admin.firestore().collection(COLN_TIMETABLE).doc('2019_z23').collection('MAR').doc('c5vzN2aaUoYlrNuop7wt');
     var song = req.query.song;
     return docRef.update({
-        t00: [dummy1, dummy2, dummy3],
-        t10: [dummy2, dummy3],
-        t20: [dummy2, dummy3],
-        t30: [dummy2, dummy3],
-        t40: [dummy2],
-        t50: [dummy2]
+        t00: [dummy2],
+        t10: [dummy1],
+        t20: [dummy1],
+        t30: [dummy1]        
     })
     .then(x => {
         console.log("Added to document fields. go check");
@@ -235,7 +233,7 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
 });
 
 exports.getTimetable = functions.https.onRequest((req, res) => {
-    return getAvailableAssistant2('abc','MAR',23,58200,58800,null,null).then(function(response){
+    return getAvailableAssistant2('abc','MAR',24,58200,58800,null,null).then(function(response){
         if(response === 1) {
             console.log("Method ran succesfully");
             return res.status(200).send("SUCCESS");
@@ -416,13 +414,65 @@ var getAvailableAssistant = function(address, service, time, exceptions) {
     });   
 }
 
+class DecodedTime {    
+    constructor(hour, min) {
+        this.hour = hour;
+        this.min = min;
+    }
+
+    getHours(){return this.hour;}
+
+    getMins(){return this.min;}
+
+    getSlot(){return this.min/10;}
+}
+
 var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED");
-    console.log("Params: {date:" + date + " ,st_time:" + st_time + ",en_time:" + en_time);
+    console.log("Params: {date:" + date + " ,st_time:" + st_time + ",en_time:" + en_time + "}");
     const docId = '2019_z23';
-    var st_time_obj = decodeHourMinFromTime(st_time);
+    const buffer_secs = 1200;
+    /**
+     * Time management:
+     * - req_st_time -> (should be greater than current time, should consider travelling distance)
+     * - req_en_time -> (bleh)
+     * - req_time_buffer -> (shoud be greater than current time)
+     * 
+     */
+    var today = new Date();
+    if(date < today.getDate()){
+        console.error("Received a request for a date in the past.");
+        return 0;
+    }    
+    var st_time_obj = decodeHourMinFromTime(st_time);   //p
     var en_time_obj = decodeHourMinFromTime(en_time);
+    //var slots = getSlotCount(st_time_obj, en_time_obj);
+    
+    // dcs = decoder(st_time);
+    // console.log("Class returned objects: " + dcs.getHour() + " " + dcs.getMin());
+
+    var st_time_buffer_obj = decodeHourMinFromTime(st_time - buffer_secs);
+    var en_time_buffer_obj = decodeHourMinFromTime(en_time + buffer_secs);
     //var slots = getSlotCount(st_hour, en_hour, st_min, en_min);
+
+    //make sure start times are not before current time
+    if(date === today.getDate()) {
+        console.log("Verifying time slots")
+        st_time_obj = verifyTime(st_time_obj,today.getHours(), today.getMinutes());
+        st_time_buffer_obj = verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
+    }
+
+    var min_doc_id = st_time_buffer_obj.getHours();
+    var max_doc_id = en_time_buffer_obj.getHours();
+
+    //var min_slot_id = minToSlotId(st_time_buffer_obj.min);   //10 -> 1, 20 -> 2
+    //var max_slot_id = minToSlotId(en_time_buffer_obj.min);
+    var min_slot_id = st_time_buffer_obj.getSlot();
+    var max_slot_id = en_time_buffer_obj.getSlot();
+
+    console.log("Generated Details: \nMin Doc ID: " + min_doc_id + "\nMax Doc ID: " + max_doc_id 
+    + "\nMin Slot ID: " + min_slot_id + "\nMax Slot ID: " + max_slot_id);
+    const TOTAL_SLOTS = 6;
 
     if(forceAssistant) {
         console.log("Fetching schedule and available slot for only assistant: " + forceAssistant);
@@ -438,35 +488,98 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
         }        
         var ttRef = admin.firestore().collection(COLN_TIMETABLE).doc(docId).collection(monthId);
         var query = ttRef;
-        if(st_time_obj.hour === en_time_obj.hour) {
-            query = ttRef.where("date", "==", date).where("hour", "==", st_time_obj.hour)    
+        if(st_time_buffer_obj.getHours() === en_time_buffer_obj.getHours()) {
+            console.log("Querying through one doc: " + st_time_buffer_obj.getHours());            
+            query = ttRef.where("date", "==", date).where("hour", "==", st_time_buffer_obj.getHours());    
         }else{
-            query = ttRef.where("date", "==", date).where("hour", ">=", st_time_obj.hour).where("hour", "<=", en_time_obj.hour);
+            console.log("Querying through multiple docs");
+            query = ttRef.where("date", "==", date).where("hour", ">=", st_time_buffer_obj.getHours()).where("hour", "<=", en_time_buffer_obj.getHours());
         }
+        
         return query.get().then(querySnapshot => {
+            var asMap = [];            
+            var slots = [];
+            var i,j,k;
+            k = 0;
             querySnapshot.forEach(doc => {
-                console.log("Received docId: " + doc.id + " -> DocData: " + doc.data().date);
+                console.log("Received docId: " + doc.id);
                 const docDetails = doc.data();
-                var asMap = [];
-                for(var i=0; i<assistants.length; i++) {
-                    for(var j=0; j<6; j++) {
-                        console.log("Inside loop: i:" + i + ", j: " + j);
-                        if(docDetails[getTTFieldName(j)]){
-                            console.log("Field name for j:" + j + " = " + getTTFieldName(j));
-                            console.log("Doc Details for j: " + j + " = " + docDetails['t00']);
-                            asMap[i][j] = false;
-                            //!docDetails[getTTFieldName(j)].includes(assistants[i]);
-                        }else{
-                            asMap[i][j] = true;
+
+                if(min_doc_id === max_doc_id) {  //only one document fetched
+                    for(j=min_slot_id; j<=max_slot_id; j++) {
+                        let asRow = [];
+                        slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
+                        let busyAssistants = docDetails[getTTFieldName(j)];
+                        console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                        for(i=0; i<assistants.length; i++) {
+                            console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                            //create row
+                            if(typeof busyAssistants !== 'undefined'){
+                                asRow[i] = !busyAssistants.includes(assistants[i]);
+                            }else{
+                                asRow[i] = true;
+                            }
+                        }
+                        asMap[k] = asRow;
+                        k++;
+                    }
+                }else{
+                    if(docDetails.hour === min_doc_id) {
+                        for(j=min_slot_id; j<TOTAL_SLOTS; j++) {
+                            let asRow = [];
+                            slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
+                            let busyAssistants = docDetails[getTTFieldName(j)];
+                            console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                            for(i=0; i<assistants.length; i++) {
+                                console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                //create row
+                                if(typeof busyAssistants !== 'undefined'){
+                                    asRow[i] = !busyAssistants.includes(assistants[i]);
+                                }else{
+                                    asRow[i] = true;
+                                }
+                            }
+                            asMap[k] = asRow;
+                            k++;
+                        }
+                    }                    
+                    if(docDetails.hour === max_doc_id) {
+                        for(j=0; j<=max_slot_id; j++){                            
+                            let asRow = [];
+                            slots[k] = new DecodedTime(max_doc_id, j*10);   //j is slot
+                            let busyAssistants = docDetails[getTTFieldName(j)];
+                            console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                            for(i=0; i<assistants.length; i++) {
+                                console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                //create row
+                                if(typeof busyAssistants !== 'undefined'){
+                                    asRow[i] = !busyAssistants.includes(assistants[i]);
+                                }else{
+                                    asRow[i] = true;
+                                }
+                            }
+                            asMap[k] = asRow;
+                            k++;
                         }
                     }
-                }                
-                console.log(docDetails['t10']);
-                // docDetails.t10.forEach(assistant => {
-                //     console.log("array element: " + assistant);
-                // });
-                console.log('Boolean map: \n' + asMap);               
+                }
+                console.log("Generated table: ");
+                for(i=0; i<assistants.length; i++) {
+                    var x = "";
+                    for(j=0; j<slots.length; j++) {
+                        x = x.concat(asMap[j][i] + "\t");
+                    }
+                    console.log(x);
+                }
             });
+            console.log("Main table map: ");
+            for(i=0; i<assistants.length; i++) {
+                var x = "";
+                for(j=0; j<slots.length; j++) {
+                    x = x.concat(asMap[j][i] + "\t");
+                }
+                console.log(x);
+            }
             return 1;
         }).catch(error => {
             console.log("Error occured: " + error);
@@ -478,6 +591,14 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
     });   
 }
 
+/**
+ * @param {number} time 
+ * DECODEHOURMINFROMTIME
+ * - divides number in hours and minutes
+ * - rounds minutes
+ * - generates DecodedTime object
+ * - Min possible values = {0, 10, 20, 30, 40, 50}
+ */
 var decodeHourMinFromTime = function(time) {
     if(isNaN(time)){   
         console.error("Received time is not a number");
@@ -486,7 +607,7 @@ var decodeHourMinFromTime = function(time) {
     var hr =  Math.trunc(time/3600);
     var prod = time/60;
     var min_raw = prod%60;
-    console.log("Decoded time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
+    console.log("Decoded raw time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
     //round minutes to nearest 10 if not done already
     var min_trunc = Math.round(min_raw/10);    
     var mn = min_trunc*10;
@@ -496,9 +617,37 @@ var decodeHourMinFromTime = function(time) {
     }
     console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
     //TODO Can hour ever be 24?
-    var time_decoded = {hour:hr,min:mn};
-    return time_decoded;
+    //var time_decoded = {hour:hr,min:mn};
+    return new DecodedTime(hr, mn);
 }
+
+ var verifyTime = function(vTime, hrs, mins) {
+    //TODO
+    return vTime;
+ }
+
+// var decoder = function(time) {
+//     if(isNaN(time)){   
+//         console.error("Received time is not a number");
+//         time = parseInt(time, 10);
+//     }
+//     var hr =  Math.trunc(time/3600);
+//     var prod = time/60;
+//     var min_raw = prod%60;
+//     console.log("Decoded time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
+//     //round minutes to nearest 10 if not done already
+//     var min_trunc = Math.round(min_raw/10);    
+//     var mn = min_trunc*10;
+//     if(min_trunc === 60) {
+//         hr += 1;
+//         mn = 0;    
+//     }
+//     console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
+//     //TODO Can hour ever be 24?
+//     //var time_decoded = {hour:hr,min:mn};
+//     console.log("Creating class object");
+//     return new DecodedTime(hr,mn);
+// }
 
 var getTTFieldName = function(n){
     switch(n) {
