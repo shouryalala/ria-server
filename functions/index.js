@@ -55,6 +55,7 @@ const VISIT_STATUS_COMPLETED = 1;
 const VISIT_STATUS_ONGOING = 2;
 const VISIT_STATUS_UPCOMING = 3;
 //
+const TOTAL_SLOTS = 6;
 const dummy1 = 'bhenbhaibhenbhai';
 const dummy2 = 'acxacxsexsexsex';
 const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
@@ -232,9 +233,9 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
     });
 });
 
-exports.getTimetable = functions.https.onRequest((req, res) => {
-    return getAvailableAssistant2('abc','MAR',24,58200,58800,null,null).then(function(response){
-        if(response === 1) {
+exports.getTimetably = functions.https.onRequest((req, res) => {
+    return getAvailableAssistant2('abc','MAR',24,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
+        if(response === true) {
             console.log("Method ran succesfully");
             return res.status(200).send("SUCCESS");
         }else{
@@ -427,9 +428,22 @@ class DecodedTime {
     getSlot(){return this.min/10;}
 }
 
+/**
+ * 
+ * @param {string} address 
+ * @param {string} monthId 
+ * @param {number} date 
+ * @param {number} st_time 
+ * @param {number} en_time 
+ * @param {list} exceptions 
+ * @param {string} forceAssistant 
+ * 
+ * - decode time to slots
+ * - fetch the timetable
+ * - use a sliding window to evaluate free slot
+ */
 var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
-    console.log("::getAvailableAssistant::INVOKED");
-    console.log("Params: {date:" + date + " ,st_time:" + st_time + ",en_time:" + en_time + "}");
+    console.log("::getAvailableAssistant::INVOKED");    
     const docId = '2019_z23';
     const buffer_secs = 1200;
     /**
@@ -440,16 +454,13 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
      * 
      */
     var today = new Date();
+    console.log("Debug:: Today: " + today.getDate());
     if(date < today.getDate()){
         console.error("Received a request for a date in the past.");
-        return 0;
-    }    
+        //TODO return 0;
+    }
     var st_time_obj = decodeHourMinFromTime(st_time);   //p
-    var en_time_obj = decodeHourMinFromTime(en_time);
-    //var slots = getSlotCount(st_time_obj, en_time_obj);
-    
-    // dcs = decoder(st_time);
-    // console.log("Class returned objects: " + dcs.getHour() + " " + dcs.getMin());
+    var en_time_obj = decodeHourMinFromTime(en_time);     
 
     var st_time_buffer_obj = decodeHourMinFromTime(st_time - buffer_secs);
     var en_time_buffer_obj = decodeHourMinFromTime(en_time + buffer_secs);
@@ -461,39 +472,116 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
         st_time_obj = verifyTime(st_time_obj,today.getHours(), today.getMinutes());
         st_time_buffer_obj = verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
     }
+    //var timetableNslots = getTimetable
+    return getTimetable(docId, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant).then(res => {
+        if(res === 0) {
+            console.error("Received an error from getTimetable. Exiting method");
+            return 0;
+        }
+        const num_slots = (en_time_obj.getHours() - st_time_obj.getHours())*TOTAL_SLOTS + (en_time_obj.getSlot() - st_time_obj.getSlot());
+        var p = (st_time_obj.getHours() - st_time_buffer_obj.getHours())*TOTAL_SLOTS + (st_time_obj.getSlot() - st_time_buffer_obj.getSlot());
+        console.log("Num_slots required: " + num_slots + ", P: " + p);
+        let k_right = p;
+        let k_left = p-1;
+        //let multiplier = -1;
+        let flag = false;
+        while((k_right+num_slots) <= res.slotLib.length || (k_left >= 0)) {
+            let tAssistantId;
+            if((k_right + num_slots) <= res.slotLib.length) {
+                tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_right,num_slots);
+                if(tAssistantId !== null) {                    
+                    console.log("Found free assistant: " + tAssistantId + " in window: " + k_right);
+                    console.log("Slot: " + k_right + ", Decoded:: (" + res.slotLib[k_right].getHours() + "," +  res.slotLib[k_right].getMins() + ")");
+                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
+                    flag = true;
+                }
+                //move k forward
+                k_right++;
+            }
+            if(k_left >= 0) {
+                tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_left,num_slots);
+                if(tAssistantId !== null) {                    
+                    console.log("Found free assistant: " + tAssistantId + " in window: " + k_left);
+                    console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
+                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
+                    flag = true;
+                }
+                //move k backward
+                k_left--;
+            }
+        }
+        return flag;
+    });
+}
 
-    var min_doc_id = st_time_buffer_obj.getHours();
-    var max_doc_id = en_time_buffer_obj.getHours();
+var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
+    console.log("GETASSISTANTFROMWINDOW: Testing index: " + index + ", slots: " + slots);
+    let i,j;    
+    for(i=0; i<assistants.length; i++) {
+        let flag = true;
+        for(j=index; j<index+slots; j++) {
+            if(!timetable[j][i]) {
+                //slot is not free, window fails.
+                flag = false;
+            }
+        }
+        if(flag === true) {
+            console.log("GETASSISTANTFROMWINDOW: Found Free Assistant:" + i + "!");
+            return assistants[i];
+        }
+    }
+    console.log("GETASSISTANTFROMWINDOW: Didnt find a free Assistant in this window.");
+    return null;
+}
 
-    //var min_slot_id = minToSlotId(st_time_buffer_obj.min);   //10 -> 1, 20 -> 2
-    //var max_slot_id = minToSlotId(en_time_buffer_obj.min);
-    var min_slot_id = st_time_buffer_obj.getSlot();
-    var max_slot_id = en_time_buffer_obj.getSlot();
+var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exceptions, forceAssistant) {
+    console.log("::getTimetable::INVOKED");
+    console.log("Params: {date:" + date + " ,st_time:" + st_time_dec + ",en_time:" + en_time_dec + "}");
+    
+    var min_doc_id = st_time_dec.getHours();
+    var max_doc_id = en_time_dec.getHours();
+
+    //var min_slot_id = minToSlotId(st_time_dec.min);   //10 -> 1, 20 -> 2
+    //var max_slot_id = minToSlotId(en_time_dec.min);
+    var min_slot_id = st_time_dec.getSlot();
+    var max_slot_id = en_time_dec.getSlot();
 
     console.log("Generated Details: \nMin Doc ID: " + min_doc_id + "\nMax Doc ID: " + max_doc_id 
-    + "\nMin Slot ID: " + min_slot_id + "\nMax Slot ID: " + max_slot_id);
-    const TOTAL_SLOTS = 6;
+    + "\nMin Slot ID: " + min_slot_id + "\nMax Slot ID: " + max_slot_id);    
 
-    if(forceAssistant) {
-        console.log("Fetching schedule and available slot for only assistant: " + forceAssistant);
-        //TODO
-        return 0;
-    }
     return admin.firestore().collection(COLN_TIMETABLE).doc(docId).get().then(docSnapshot => {
         var assistant_list = docSnapshot.data();
         var assistants = [];
         for(const key in assistant_list) {
             console.log("ID: " + key + " -> " + assistant_list[key]);
             assistants.push(key);
-        }        
-        var ttRef = admin.firestore().collection(COLN_TIMETABLE).doc(docId).collection(monthId);
-        var query = ttRef;
-        if(st_time_buffer_obj.getHours() === en_time_buffer_obj.getHours()) {
-            console.log("Querying through one doc: " + st_time_buffer_obj.getHours());            
-            query = ttRef.where("date", "==", date).where("hour", "==", st_time_buffer_obj.getHours());    
+        }
+        if(forceAssistant !== null) {
+            console.log("Search details for only this assistant: " + forceAssistant);
+            //TODO
+            if(assistants.includes(forceAssistant)) {
+                assistants = [];
+                assistants.push(forceAssistant)
+            }
+        }else if(exceptions !== null) {
+            while((rAssistant=exceptions.pop()) !== null) {
+                console.log("Exceptions list item: " + rAssistant);
+                for(let i=0; i<assistants.length; i++) {
+                    if(assistants[i] === rAssistant){
+                        console.log(assistant[i] + " removed from list");
+                        assistants.splice(i,1);
+                    }
+                }
+            }
+        }
+        var query = admin.firestore().collection(COLN_TIMETABLE).doc(docId).collection(monthId);
+        //var query = ttRef;
+        if(st_time_dec.getHours() === en_time_dec.getHours()) {
+            console.log("Querying through one doc: " + st_time_dec.getHours());            
+            query = query.where("date", "==", date).where("hour", "==", st_time_dec.getHours());    
         }else{
             console.log("Querying through multiple docs");
-            query = ttRef.where("date", "==", date).where("hour", ">=", st_time_buffer_obj.getHours()).where("hour", "<=", en_time_buffer_obj.getHours());
+            query = query.where("date", "==", date).where("hour", ">=", st_time_dec.getHours()).where("hour", "<=", en_time_dec.getHours());
         }
         
         return query.get().then(querySnapshot => {
@@ -563,16 +651,16 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
                         }
                     }
                 }
-                console.log("Generated table: ");
-                for(i=0; i<assistants.length; i++) {
-                    var x = "";
-                    for(j=0; j<slots.length; j++) {
-                        x = x.concat(asMap[j][i] + "\t");
-                    }
-                    console.log(x);
-                }
+                // console.log("Generated table: ");
+                // for(i=0; i<assistants.length; i++) {
+                //     var x = "";
+                //     for(j=0; j<slots.length; j++) {
+                //         x = x.concat(asMap[j][i] + "\t");
+                //     }
+                //     console.log(x);
+                // }
             });
-            console.log("Main table map: ");
+            console.log("Generated table map: ");
             for(i=0; i<assistants.length; i++) {
                 var x = "";
                 for(j=0; j<slots.length; j++) {
@@ -580,9 +668,15 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
                 }
                 console.log(x);
             }
-            return 1;
+            const sObj = {
+                assistantLib: assistants,
+                slotLib: slots,
+                timetable: asMap,
+                assistant_token: assistant_list
+            }            
+            return sObj;
         }).catch(error => {
-            console.log("Error occured: " + error);
+            console.error("Failed to generate table: " + error);
             return 0;
         });
     }).catch(error => {
