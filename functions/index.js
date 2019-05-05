@@ -48,6 +48,9 @@ const SERVICE_DUSTING = "Dx";
 const SERVICE_UTENSILS = "Ux";
 const SERVICE_CHORE = "Chx";
 const SERVICE_CLEANING_UTENSILS = "CUx";
+//Service Durations
+const SERVICE_CLEANING_DURATION = 1800;
+const SERVICE_UTENSILS_DURATION = 900;
 //Visit decodes
 const VISIT_STATUS_FAILED = -1;
 const VISIT_STATUS_CANCELLED = 0;
@@ -56,6 +59,7 @@ const VISIT_STATUS_ONGOING = 2;
 const VISIT_STATUS_UPCOMING = 3;
 //
 const TOTAL_SLOTS = 6;
+const BUFFER_TIME = 1200;
 const dummy1 = 'bhenbhaibhenbhai';
 const dummy2 = 'acxacxsexsexsex';
 const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
@@ -92,7 +96,7 @@ exports.createToken = functions.https.onRequest((req, res) => {
     //TODO add end() somehow    
 });
 
-//************ Dummy Methods ********************************
+//************ Dummy Methods ********************************************************
 //BOILERPLATE NOTIFICATION
 exports.sendNotification = functions.https.onRequest((req, res) => {
 	const sent_text = req.query.text;
@@ -233,7 +237,7 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
     });
 });
 
-exports.getTimetably = functions.https.onRequest((req, res) => {
+exports.getTimetably = functions.https.onRequest((req, res) => {    
     return getAvailableAssistant2('abc','MAR',24,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
         if(response === true) {
             console.log("Method ran succesfully");
@@ -244,7 +248,53 @@ exports.getTimetably = functions.https.onRequest((req, res) => {
         }
     });
 });
-//************************************************************
+
+
+/**
+ * GETAVAILABLEASSISTANT
+ * @param {string} address 
+ * @param {string} service 
+ * @param {string} time (in system millis) 
+ * @param {array} exceptions (array of assistants to ommit from availability)
+ * 
+ * return assistant = {name, instanceId, assId}
+ */
+var getAvailableAssistant2 = function(address, service, time, exceptions) {
+    console.log("::getAvailableAssistant::INVOKED");    
+
+    //TODO
+    var aId = "alYssfTuB2Y1tTw5jEaQfVCxUhX2";
+
+    return admin.firestore().collection(COLN_ASSISTANTS).doc(aId).get().then(doc => {
+        const aDoc = doc.data();
+        console.log("Fetched Available assitant details: Assistant name: " + aDoc.name + " ID: " + aId)
+        var assistant = {
+            name: aDoc.name,
+            assId: aId,
+            clientToken: aDoc.client_token
+        }
+        return assistant;
+    })
+    .catch(error => {
+        console.error("Error fetching record: " + error);
+        return null;
+    });   
+}
+//***********************************************************************************
+
+
+class DecodedTime {    
+    constructor(hour, min) {
+        this.hour = hour;
+        this.min = min;
+    }
+
+    getHours(){return this.hour;}
+
+    getMins(){return this.min;}
+
+    getSlot(){return this.min/10;}
+}
 
 /**
  * USERREQUESTHANDLER
@@ -260,14 +310,14 @@ exports.userRequestHandler = functions.firestore
         console.log("::userRequestHandler::INVOKED");
         const requestObj = snap.data();
         const requestId = context.params.requestId;     //get request ID from wildcard
+        const monthId = context.params.monthSubcollectionId;
         console.log("Request ID: " + requestId);
         
-        return getAvailableAssistant(requestObj.address, requestObj.service, requestObj.req_time, null)
-            .then(function(assistant){
-                /*
-                    assistant should contain: 
-                    {assistant client token, assistant name, assistant ID}
-                */
+        let st_time = parseInt(requestObj.req_time);
+        let en_time = st_time + getServiceDuration(requestObj.service, null);
+        //TODOOOOOO
+        return getAvailableAssistant(requestObj.address, monthId, 24, st_time, en_time, null,null)
+            .then(function(assistant){                
                 if(assistant === null) {
                     console.log("No available maids at the moment.");
                     //TODO
@@ -384,52 +434,7 @@ var sendAssitantRequest = function(requestId, request, assistant) {
             });
 }
 
-/**
- * GETAVAILABLEASSISTANT
- * @param {string} address 
- * @param {string} service 
- * @param {string} time (in system millis) 
- * @param {array} exceptions (array of assistants to ommit from availability)
- * 
- * return assistant = {name, instanceId, assId}
- */
-var getAvailableAssistant = function(address, service, time, exceptions) {
-    console.log("::getAvailableAssistant::INVOKED");    
-
-    //TODO
-    var aId = "alYssfTuB2Y1tTw5jEaQfVCxUhX2";
-
-    return admin.firestore().collection(COLN_ASSISTANTS).doc(aId).get().then(doc => {
-        const aDoc = doc.data();
-        console.log("Fetched Available assitant details: Assistant name: " + aDoc.name + " ID: " + aId)
-        var assistant = {
-            name: aDoc.name,
-            assId: aId,
-            clientToken: aDoc.client_token
-        }
-        return assistant;
-    })
-    .catch(error => {
-        console.error("Error fetching record: " + error);
-        return null;
-    });   
-}
-
-class DecodedTime {    
-    constructor(hour, min) {
-        this.hour = hour;
-        this.min = min;
-    }
-
-    getHours(){return this.hour;}
-
-    getMins(){return this.min;}
-
-    getSlot(){return this.min/10;}
-}
-
-/**
- * 
+/** 
  * @param {string} address 
  * @param {string} monthId 
  * @param {number} date 
@@ -440,12 +445,14 @@ class DecodedTime {
  * 
  * - decode time to slots
  * - fetch the timetable
- * - use a sliding window to evaluate free slot
+ * - use a sliding window to obtain optimal free slot
+ * 
+ * return Obj = {assistant ID, assistant client token, [DecodedTime]free slots array}
  */
-var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
+var getAvailableAssistant = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED");    
     const docId = '2019_z23';
-    const buffer_secs = 1200;
+    //const buffer_secs = 1200;
     /**
      * Time management:
      * - req_st_time -> (should be greater than current time, should consider travelling distance)
@@ -462,8 +469,8 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
     var st_time_obj = decodeHourMinFromTime(st_time);   //p
     var en_time_obj = decodeHourMinFromTime(en_time);     
 
-    var st_time_buffer_obj = decodeHourMinFromTime(st_time - buffer_secs);
-    var en_time_buffer_obj = decodeHourMinFromTime(en_time + buffer_secs);
+    var st_time_buffer_obj = decodeHourMinFromTime(st_time - BUFFER_TIME);
+    var en_time_buffer_obj = decodeHourMinFromTime(en_time + BUFFER_TIME);
     //var slots = getSlotCount(st_hour, en_hour, st_min, en_min);
 
     //make sure start times are not before current time
@@ -494,6 +501,15 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
                     console.log("Slot: " + k_right + ", Decoded:: (" + res.slotLib[k_right].getHours() + "," +  res.slotLib[k_right].getMins() + ")");
                     console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
                     flag = true;
+                    //put all slots in a block to return
+                    let slotBlock = [];
+                    for(let i=k_right; i<k_right+num_slots; k++) {
+                        slotBlock.push(res.slotLib[i]); 
+                    }
+                    let rObj = {
+                        assistantId: tAssistantId
+                    }
+                    break;
                 }
                 //move k forward
                 k_right++;
@@ -505,6 +521,7 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
                     console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
                     console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
                     flag = true;
+                    break;
                 }
                 //move k backward
                 k_left--;
@@ -514,26 +531,19 @@ var getAvailableAssistant2 = function(address, monthId, date, st_time, en_time, 
     });
 }
 
-var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
-    console.log("GETASSISTANTFROMWINDOW: Testing index: " + index + ", slots: " + slots);
-    let i,j;    
-    for(i=0; i<assistants.length; i++) {
-        let flag = true;
-        for(j=index; j<index+slots; j++) {
-            if(!timetable[j][i]) {
-                //slot is not free, window fails.
-                flag = false;
-            }
-        }
-        if(flag === true) {
-            console.log("GETASSISTANTFROMWINDOW: Found Free Assistant:" + i + "!");
-            return assistants[i];
-        }
-    }
-    console.log("GETASSISTANTFROMWINDOW: Didnt find a free Assistant in this window.");
-    return null;
-}
-
+/**
+ * @param {string} docId 
+ * @param {enum month} monthId 
+ * @param {number} date 
+ * @param {DecodedTime} st_time_dec 
+ * @param {DecodedTime} en_time_dec 
+ * @param {list} exceptions 
+ * @param {string} forceAssistant 
+ * GETTIMETABLE
+ * Generates a 2d map => asMap[SLOT][ASSISTANT] after fetching assistant scehdule from db.
+ * 
+ * return Obj = {assistantLib: assistants, slotLib: slots, timetable: asMap, assistant_token: assistant_list}
+ */
 var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exceptions, forceAssistant) {
     console.log("::getTimetable::INVOKED");
     console.log("Params: {date:" + date + " ,st_time:" + st_time_dec + ",en_time:" + en_time_dec + "}");
@@ -685,6 +695,26 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
     });   
 }
 
+var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
+    console.log("GETASSISTANTFROMWINDOW: Testing index: " + index + ", slots: " + slots);
+    let i,j;    
+    for(i=0; i<assistants.length; i++) {
+        let flag = true;
+        for(j=index; j<index+slots; j++) {
+            if(!timetable[j][i]) {
+                //slot is not free, window fails.
+                flag = false;
+            }
+        }
+        if(flag === true) {
+            console.log("GETASSISTANTFROMWINDOW: Found Free Assistant:" + i + "!");
+            return assistants[i];
+        }
+    }
+    console.log("GETASSISTANTFROMWINDOW: Didnt find a free Assistant in this window.");
+    return null;
+}
+
 /**
  * @param {number} time 
  * DECODEHOURMINFROMTIME
@@ -720,29 +750,6 @@ var decodeHourMinFromTime = function(time) {
     return vTime;
  }
 
-// var decoder = function(time) {
-//     if(isNaN(time)){   
-//         console.error("Received time is not a number");
-//         time = parseInt(time, 10);
-//     }
-//     var hr =  Math.trunc(time/3600);
-//     var prod = time/60;
-//     var min_raw = prod%60;
-//     console.log("Decoded time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
-//     //round minutes to nearest 10 if not done already
-//     var min_trunc = Math.round(min_raw/10);    
-//     var mn = min_trunc*10;
-//     if(min_trunc === 60) {
-//         hr += 1;
-//         mn = 0;    
-//     }
-//     console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
-//     //TODO Can hour ever be 24?
-//     //var time_decoded = {hour:hr,min:mn};
-//     console.log("Creating class object");
-//     return new DecodedTime(hr,mn);
-// }
-
 var getTTFieldName = function(n){
     switch(n) {
         case 0: return 't00';
@@ -752,6 +759,20 @@ var getTTFieldName = function(n){
         case 4: return 't40';
         case 5: return 't50';
         default: return 't00';
+    }
+}
+
+/** 
+ * @param {enum} service 
+ * @param {number} bhk 
+ * return Duration in secs
+ */ 
+var getServiceDuration = function(service, bhk) {
+    //TODO
+    switch(service) {
+        case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION;
+        case SERVICE_UTENSILS: return SERVICE_UTENSILS_DURATION;
+        default: return SERVICE_CLEANING_DURATION;
     }
 }
 
