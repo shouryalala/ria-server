@@ -238,13 +238,14 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
 });
 
 exports.getTimetably = functions.https.onRequest((req, res) => {    
-    return getAvailableAssistant2('abc','MAR',24,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
-        if(response === true) {
-            console.log("Method ran succesfully");
-            return res.status(200).send("SUCCESS");
-        }else{
+    return getAvailableAssistant('abc','MAR',24,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
+        if(response === null) {
             console.log("Method failed");
-            return res.status(500).send("BOOO");
+            return res.status(500).send("BOOO");            
+        }else{
+            console.log("Method ran succesfully");
+            console.log("Assistant ID: " + response.assistantId + " \nClient Token: " + response.assistantClientToken + "\nSlot Lib: " + response.freeSlotLib);
+            return res.status(200).send("SUCCESS");
         }
     });
 });
@@ -294,6 +295,8 @@ class DecodedTime {
     getMins(){return this.min;}
 
     getSlot(){return this.min/10;}
+
+    toString(){return "(Hour: " + this.hour + ", Min: " + this.min + ")";}
 }
 
 /**
@@ -447,10 +450,11 @@ var sendAssitantRequest = function(requestId, request, assistant) {
  * - fetch the timetable
  * - use a sliding window to obtain optimal free slot
  * 
- * return Obj = {assistant ID, assistant client token, [DecodedTime]free slots array}
+ * return Obj = {assistantId: string, assistantClientToken: string, FreeSlotLib: [DecodedTime]free slots array}
  */
 var getAvailableAssistant = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
-    console.log("::getAvailableAssistant::INVOKED");    
+    console.log("::getAvailableAssistant::INVOKED::Params{date: " + date + ", st_time: " 
+    + st_time + ", en_time: " + en_time + ", exceptions: " + exceptions + ", forceAssistant: " + forceAssistant + "}");
     const docId = '2019_z23';
     //const buffer_secs = 1200;
     /**
@@ -459,7 +463,7 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
      * - req_en_time -> (bleh)
      * - req_time_buffer -> (shoud be greater than current time)
      * 
-     */
+     */    
     var today = new Date();
     console.log("Debug:: Today: " + today.getDate());
     if(date < today.getDate()){
@@ -471,6 +475,9 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
 
     var st_time_buffer_obj = decodeHourMinFromTime(st_time - BUFFER_TIME);
     var en_time_buffer_obj = decodeHourMinFromTime(en_time + BUFFER_TIME);
+
+    console.log("Decoded Time: Start: " + st_time_obj.toString() + " End: " + en_time_obj.toString());
+    console.log("Decoded Buffer Time: Start: " + st_time_buffer_obj.toString() + " End: " + en_time_buffer_obj.toString());
     //var slots = getSlotCount(st_hour, en_hour, st_min, en_min);
 
     //make sure start times are not before current time
@@ -489,25 +496,27 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
         var p = (st_time_obj.getHours() - st_time_buffer_obj.getHours())*TOTAL_SLOTS + (st_time_obj.getSlot() - st_time_buffer_obj.getSlot());
         console.log("Num_slots required: " + num_slots + ", P: " + p);
         let k_right = p;
-        let k_left = p-1;
-        //let multiplier = -1;
+        let k_left = p-1;        
         let flag = false;
+        let rObj = null;
         while((k_right+num_slots) <= res.slotLib.length || (k_left >= 0)) {
-            let tAssistantId;
+            let tAssistantId;            
             if((k_right + num_slots) <= res.slotLib.length) {
                 tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_right,num_slots);
                 if(tAssistantId !== null) {                    
                     console.log("Found free assistant: " + tAssistantId + " in window: " + k_right);
                     console.log("Slot: " + k_right + ", Decoded:: (" + res.slotLib[k_right].getHours() + "," +  res.slotLib[k_right].getMins() + ")");
-                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
+                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
                     flag = true;
                     //put all slots in a block to return
                     let slotBlock = [];
-                    for(let i=k_right; i<k_right+num_slots; k++) {
+                    for(let i=k_right; i<k_right+num_slots; i++) {
                         slotBlock.push(res.slotLib[i]); 
                     }
-                    let rObj = {
-                        assistantId: tAssistantId
+                    rObj = {
+                        assistantId: tAssistantId,
+                        assistantClientToken: res.assistantTokenLib[tAssistantId],
+                        freeSlotLib: slotBlock
                     }
                     break;
                 }
@@ -519,15 +528,25 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
                 if(tAssistantId !== null) {                    
                     console.log("Found free assistant: " + tAssistantId + " in window: " + k_left);
                     console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
-                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistant_token[tAssistantId]);
+                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
                     flag = true;
+                    //put all slots in a block to return
+                    let slotBlock = [];
+                    for(let i=k_left; i<k_left+num_slots; i++) {
+                        slotBlock.push(res.slotLib[i]); 
+                    }
+                    rObj = {
+                        assistantId: tAssistantId,
+                        assistantClientToken: res.assistantTokenLib[tAssistantId],
+                        freeSlotLib: slotBlock
+                    }
                     break;
                 }
                 //move k backward
                 k_left--;
             }
         }
-        return flag;
+        return rObj;
     });
 }
 
@@ -542,11 +561,10 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
  * GETTIMETABLE
  * Generates a 2d map => asMap[SLOT][ASSISTANT] after fetching assistant scehdule from db.
  * 
- * return Obj = {assistantLib: assistants, slotLib: slots, timetable: asMap, assistant_token: assistant_list}
+ * return Obj = {assistantLib: assistants, slotLib: slots, timetable: asMap, assistantTokenLib: assistant_list}
  */
 var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exceptions, forceAssistant) {
-    console.log("::getTimetable::INVOKED");
-    console.log("Params: {date:" + date + " ,st_time:" + st_time_dec + ",en_time:" + en_time_dec + "}");
+    console.log("::getTimetable::INVOKED::Params: {date:" + date + " ,st_time:" + st_time_dec.toString() + ",en_time:" + en_time_dec.toString() + "}");
     
     var min_doc_id = st_time_dec.getHours();
     var max_doc_id = en_time_dec.getHours();
@@ -556,17 +574,18 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
     var min_slot_id = st_time_dec.getSlot();
     var max_slot_id = en_time_dec.getSlot();
 
-    console.log("Generated Details: \nMin Doc ID: " + min_doc_id + "\nMax Doc ID: " + max_doc_id 
-    + "\nMin Slot ID: " + min_slot_id + "\nMax Slot ID: " + max_slot_id);    
+    console.log("Generated Timeline Details: \nMin: (Doc ID: " + min_doc_id + ", Slot ID: " + min_slot_id 
+        + ")\nMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
 
     return admin.firestore().collection(COLN_TIMETABLE).doc(docId).get().then(docSnapshot => {
         var assistant_list = docSnapshot.data();
         var assistants = [];
+        console.log("Assistant List: ");
         for(const key in assistant_list) {
-            console.log("ID: " + key + " -> " + assistant_list[key]);
+            console.log("ID: " + key + "  Token " + assistant_list[key]);
             assistants.push(key);
         }
-        if(forceAssistant !== null) {
+        if(typeof forceAssistant !== 'undefined') {
             console.log("Search details for only this assistant: " + forceAssistant);
             //TODO
             if(assistants.includes(forceAssistant)) {
@@ -587,10 +606,10 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
         var query = admin.firestore().collection(COLN_TIMETABLE).doc(docId).collection(monthId);
         //var query = ttRef;
         if(st_time_dec.getHours() === en_time_dec.getHours()) {
-            console.log("Querying through one doc: " + st_time_dec.getHours());            
+            console.log("Query Type: Querying through one doc: " + st_time_dec.getHours());            
             query = query.where("date", "==", date).where("hour", "==", st_time_dec.getHours());    
         }else{
-            console.log("Querying through multiple docs");
+            console.log("Query Type: Querying through multiple docs");
             query = query.where("date", "==", date).where("hour", ">=", st_time_dec.getHours()).where("hour", "<=", en_time_dec.getHours());
         }
         
@@ -608,9 +627,9 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                         let asRow = [];
                         slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
                         let busyAssistants = docDetails[getTTFieldName(j)];
-                        console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                        //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
                         for(i=0; i<assistants.length; i++) {
-                            console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                            //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
                             //create row
                             if(typeof busyAssistants !== 'undefined'){
                                 asRow[i] = !busyAssistants.includes(assistants[i]);
@@ -627,9 +646,9 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                             let asRow = [];
                             slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
                             let busyAssistants = docDetails[getTTFieldName(j)];
-                            console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                            //console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
                             for(i=0; i<assistants.length; i++) {
-                                console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
                                 //create row
                                 if(typeof busyAssistants !== 'undefined'){
                                     asRow[i] = !busyAssistants.includes(assistants[i]);
@@ -646,9 +665,9 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                             let asRow = [];
                             slots[k] = new DecodedTime(max_doc_id, j*10);   //j is slot
                             let busyAssistants = docDetails[getTTFieldName(j)];
-                            console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                            //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
                             for(i=0; i<assistants.length; i++) {
-                                console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
                                 //create row
                                 if(typeof busyAssistants !== 'undefined'){
                                     asRow[i] = !busyAssistants.includes(assistants[i]);
@@ -661,14 +680,6 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                         }
                     }
                 }
-                // console.log("Generated table: ");
-                // for(i=0; i<assistants.length; i++) {
-                //     var x = "";
-                //     for(j=0; j<slots.length; j++) {
-                //         x = x.concat(asMap[j][i] + "\t");
-                //     }
-                //     console.log(x);
-                // }
             });
             console.log("Generated table map: ");
             for(i=0; i<assistants.length; i++) {
@@ -682,7 +693,7 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                 assistantLib: assistants,
                 slotLib: slots,
                 timetable: asMap,
-                assistant_token: assistant_list
+                assistantTokenLib: assistant_list
             }            
             return sObj;
         }).catch(error => {
@@ -695,8 +706,18 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
     });   
 }
 
+/**
+ * @param {boolean[][]} timetable
+ * @param {string[]} assistants
+ * @param {number} index 
+ * @param {number} slots 
+ * GETFREEASSISTANTFROMWINDOW
+ * Goes through the 'timetable' starting from 'index' to see if any assistant from 'assistants' is available
+ * 
+ * return Obj = {assistant/null}
+ */
 var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
-    console.log("GETASSISTANTFROMWINDOW: Testing index: " + index + ", slots: " + slots);
+    console.log("::getFreeAssistantFromWindow::INVOKED::Params{timetable:..,assistants:..,index: " + index + ", slots: " + slots + "}");
     let i,j;    
     for(i=0; i<assistants.length; i++) {
         let flag = true;
@@ -707,11 +728,11 @@ var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
             }
         }
         if(flag === true) {
-            console.log("GETASSISTANTFROMWINDOW: Found Free Assistant:" + i + "!");
+            console.log("::getFreeAssistantFromWindow: Found Free Assistant: " + i);
             return assistants[i];
         }
     }
-    console.log("GETASSISTANTFROMWINDOW: Didnt find a free Assistant in this window.");
+    console.log("::getFreeAssistantFromWindow: Didnt find a free Assistant in this window.");
     return null;
 }
 
@@ -731,7 +752,7 @@ var decodeHourMinFromTime = function(time) {
     var hr =  Math.trunc(time/3600);
     var prod = time/60;
     var min_raw = prod%60;
-    console.log("Decoded raw time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
+    //console.log("Decoded raw time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
     //round minutes to nearest 10 if not done already
     var min_trunc = Math.round(min_raw/10);    
     var mn = min_trunc*10;
@@ -739,7 +760,7 @@ var decodeHourMinFromTime = function(time) {
         hr += 1;
         mn = 0;    
     }
-    console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
+    //console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
     //TODO Can hour ever be 24?
     //var time_decoded = {hour:hr,min:mn};
     return new DecodedTime(hr, mn);
