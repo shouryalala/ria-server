@@ -1,6 +1,11 @@
 const functions = require('firebase-functions');
 // The Firebase Admin SDK to access the Firebase Realtime Database.
 const admin = require('firebase-admin');
+const twilioAccSid = 'ACa5c1c8a644b5865026a9efb1633d564a';
+const twilioAuthToken = 'eb2f66297a8319ecae91f53851c14778';
+// const twilioAccSid = 'SK681c3f5d22112a4e34ce711377c2c6d6';
+// const twilioAuthToken = 'x31SBJGpruNvFuRkVaAVopuoMiEggiZ0';
+const twilio = require('twilio')(twilioAccSid, twilioAuthToken);
 
 //var serviceAccount = require('kanta-6f9f5-firebase-adminsdk-53vmc-c7119079df.json');
 //firebase-adminsdk-53vmc@kanta-6f9f5.iam.gserviceaccount.com
@@ -160,6 +165,24 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 
 });
 
+//url: 'https://handler.twilio.com/twiml/EH85c13367eb9bd0456c90a363f632ee7c',
+exports.hitMeUp = functions.https.onRequest((req, res) => {    
+    twilio.calls
+      .create({
+         url: "https://handler.twilio.com/twiml/EH85c13367eb9bd0456c90a363f632ee7c",         
+         to: '+919986643444',
+         from: '+12019925236'
+       })
+      .then(call => {
+        console.log(call.sid);
+        return res.status(200).send("Success Yo");
+      })
+      .catch(error => {
+        console.log(error);
+        return res.status(500).send("Error!");
+      });
+});
+
 //BOILERPLATE FUNCTION
 exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
 	const service = req.query.service;
@@ -214,13 +237,13 @@ exports.setArrayToDocument = functions.https.onRequest((req, res) => {
 exports.createDummyRequest = functions.https.onRequest((req, res) => {
     console.log("::createDummyRequest::INVOKED");
     const yearDoc = "2019";
-    const monthSubCollection = "MAR"; 
+    const monthSubCollection = "JUN"; 
     var packet = {
         user_id: "9986643444",
         service: req.query.service,
         date: new Date().getDate(),
         address:req.query.address,
-        society_id: "abx",
+        society_id: "bvp",
         asn_response: AST_RESPONSE_NIL,        
         status: REQ_STATUS_UNASSIGNED,
         req_time: parseInt(req.query.time),     //in secs since 12
@@ -238,7 +261,7 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
 });
 
 exports.getTimetably = functions.https.onRequest((req, res) => {    
-    return getAvailableAssistant('abc','MAR',24,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
+    return getAvailableAssistant('abc','JUN',28,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
         if(response === null) {
             console.log("Method failed");
             return res.status(500).send("BOOO");            
@@ -296,6 +319,8 @@ class DecodedTime {
 
     getSlot(){return this.min/10;}
 
+    encode(){return this.hour*3600 + this.min*60;}
+
     toString(){return "(Hour: " + this.hour + ", Min: " + this.min + ")";}
 }
 
@@ -319,7 +344,7 @@ exports.userRequestHandler = functions.firestore
         let st_time = parseInt(requestObj.req_time);
         let en_time = st_time + getServiceDuration(requestObj.service, null);
         //TODOOOOOO
-        return getAvailableAssistant(requestObj.address, monthId, 24, st_time, en_time, null,null)
+        return getAvailableAssistant(requestObj.address, monthId, requestObj.date, st_time, en_time, null,null)
             .then(function(assistant){                
                 if(assistant === null) {
                     console.log("No available maids at the moment.");
@@ -327,14 +352,14 @@ exports.userRequestHandler = functions.firestore
                     return 0;
                 }
                
-                console.log("Assistant details obtained: " + assistant.name + "\nSending assitant request..");            
+                console.log("Assistant details obtained: " + assistant._id + "\nSending assitant request..");            
 
                 return sendAssitantRequest(requestId, requestObj, assistant)
                     .then(function(response){
                         if(response === 1) {
                             console.log("Updating the snapshot's assignee.");
                             return snap.ref.set({
-                                asn_id: assistant.assId,
+                                asn_id: assistant._id,
                                 asn_response: "NIL"     //Can be set by client
                             }, {merge: true});
                         }else{
@@ -408,25 +433,26 @@ exports.assistantResponseHandler = functions.firestore
  * @param {name, instanceId, assId} assistant 
  */
 var sendAssitantRequest = function(requestId, request, assistant) {
-    console.log("::sendAssitantRequest::INVOKED");    
+    console.log("::sendAssitantRequest::INVOKED");        
+    console.log("Encoded time: " + assistant.freeSlotLib[0].encode());
     const payload = {
         data: {
             RID: requestId,
             Service: request.service,
             Address: request.address,
-            Time: String(request.req_time),      //cant send number
+            Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
             Command: COMMAND_WORK_REQUEST
         }
     };
 
-    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant.assId);
+    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant._id);
     //send payload to assistant        
     return admin.messaging().sendToDevice(assistant.clientToken, payload)
             .then(function(response) {
                 console.log("Request sent succesfully! Request ID: " + requestId);
                 setTimeout(() => {
                     console.log("Invoking routine Request status check for requestId: " + requestId);
-                    checkRequestStatus(requestId, assistant.assId);
+                    checkRequestStatus(requestId, assistant._id);
                 }, 2*60*1000);
                 return 1;
             })
@@ -450,7 +476,7 @@ var sendAssitantRequest = function(requestId, request, assistant) {
  * - fetch the timetable
  * - use a sliding window to obtain optimal free slot
  * 
- * return Obj = {assistantId: string, assistantClientToken: string, FreeSlotLib: [DecodedTime]free slots array}
+ * return Obj = {_id: string, clientToken: string, FreeSlotLib: [DecodedTime]free slots array}
  */
 var getAvailableAssistant = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED::Params{date: " + date + ", st_time: " 
@@ -492,6 +518,10 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
             console.error("Received an error from getTimetable. Exiting method");
             return 0;
         }
+        // if(Object.keys(res.timetable).length == 0) {
+        //     console.log("No timetable created as ")
+        // }
+
         const num_slots = (en_time_obj.getHours() - st_time_obj.getHours())*TOTAL_SLOTS + (en_time_obj.getSlot() - st_time_obj.getSlot());
         var p = (st_time_obj.getHours() - st_time_buffer_obj.getHours())*TOTAL_SLOTS + (st_time_obj.getSlot() - st_time_buffer_obj.getSlot());
         console.log("Num_slots required: " + num_slots + ", P: " + p);
@@ -514,8 +544,8 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
                         slotBlock.push(res.slotLib[i]); 
                     }
                     rObj = {
-                        assistantId: tAssistantId,
-                        assistantClientToken: res.assistantTokenLib[tAssistantId],
+                        _id: tAssistantId,
+                        clientToken: res.assistantTokenLib[tAssistantId],
                         freeSlotLib: slotBlock
                     }
                     break;
@@ -536,8 +566,8 @@ var getAvailableAssistant = function(address, monthId, date, st_time, en_time, e
                         slotBlock.push(res.slotLib[i]); 
                     }
                     rObj = {
-                        assistantId: tAssistantId,
-                        assistantClientToken: res.assistantTokenLib[tAssistantId],
+                        _id: tAssistantId,
+                        clientToken: res.assistantTokenLib[tAssistantId],
                         freeSlotLib: slotBlock
                     }
                     break;
@@ -585,7 +615,8 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
             console.log("ID: " + key + "  Token " + assistant_list[key]);
             assistants.push(key);
         }
-        if(typeof forceAssistant !== 'undefined') {
+        if(forceAssistant !== null) {
+            //typeof forceAssistant !== 'undefined' 
             console.log("Search details for only this assistant: " + forceAssistant);
             //TODO
             if(assistants.includes(forceAssistant)) {
@@ -617,53 +648,52 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
             var asMap = [];            
             var slots = [];
             var i,j,k;
-            k = 0;
-            querySnapshot.forEach(doc => {
-                console.log("Received docId: " + doc.id);
-                const docDetails = doc.data();
+            k = 0;            
+            const num_cols = (max_doc_id - min_doc_id)*TOTAL_SLOTS + (max_slot_id - min_slot_id);
+            const num_rows = assistants.length;
 
-                if(min_doc_id === max_doc_id) {  //only one document fetched
-                    for(j=min_slot_id; j<=max_slot_id; j++) {
-                        let asRow = [];
-                        slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
-                        let busyAssistants = docDetails[getTTFieldName(j)];
-                        //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
-                        for(i=0; i<assistants.length; i++) {
-                            //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
-                            //create row
-                            if(typeof busyAssistants !== 'undefined'){
-                                asRow[i] = !busyAssistants.includes(assistants[i]);
-                            }else{
-                                asRow[i] = true;
-                            }
-                        }
-                        asMap[k] = asRow;
-                        k++;
-                    }
-                }else{
-                    if(docDetails.hour === min_doc_id) {
-                        for(j=min_slot_id; j<TOTAL_SLOTS; j++) {
-                            let asRow = [];
-                            slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
-                            let busyAssistants = docDetails[getTTFieldName(j)];
-                            //console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
-                            for(i=0; i<assistants.length; i++) {
-                                //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
-                                //create row
-                                if(typeof busyAssistants !== 'undefined'){
-                                    asRow[i] = !busyAssistants.includes(assistants[i]);
-                                }else{
-                                    asRow[i] = true;
+            //First create default table
+            let tDoc = min_doc_id;
+            let tSlot = min_slot_id;
+            for(j=0; j<num_cols; j++) {
+                let asCol = [];
+                slots[j] = new DecodedTime(tDoc, (tSlot++)*10);
+                if(tSlot === TOTAL_SLOTS) {
+                    tDoc++;
+                    tSlot = 0;
+                }
+                for(i=0; i<num_rows; i++) {
+                    asCol[i] = true;    //assistant free by default                    
+                }
+                asMap[j] = asCol;
+            }
+            
+            console.log("QuerySnapshot: " + querySnapshot.empty);            
+            if(!querySnapshot.empty){
+                console.log("Querying documents and updating table");            
+                querySnapshot.forEach(doc => {                        
+                    //might be in an incorrect order
+                    const docDetails = doc.data();
+                    for(j=0; j<num_cols; j++) {
+                        if(slots[j].getHours() === docDetails['hour']) {
+                            let busyAssistants = docDetails[getTTFieldName(slots[j].getSlot())];
+                            for(i=0; i<num_rows; i++){
+                                if(typeof busyAssistants !== 'undefined') {
+                                    asMap[j][i] = !busyAssistants.includes(assistants[i]);
                                 }
                             }
-                            asMap[k] = asRow;
-                            k++;
                         }
                     }                    
-                    if(docDetails.hour === max_doc_id) {
-                        for(j=0; j<=max_slot_id; j++){                            
+                });
+
+            /*    querySnapshot.forEach(doc => {
+                    console.log("Received docId: " + doc.id);
+                    const docDetails = doc.data();
+
+                    if(min_doc_id === max_doc_id) {  //only one document fetched
+                        for(j=min_slot_id; j<=max_slot_id; j++) {
                             let asRow = [];
-                            slots[k] = new DecodedTime(max_doc_id, j*10);   //j is slot
+                            slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
                             let busyAssistants = docDetails[getTTFieldName(j)];
                             //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
                             for(i=0; i<assistants.length; i++) {
@@ -678,9 +708,49 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                             asMap[k] = asRow;
                             k++;
                         }
+                    }else{
+                        //ASSUMES THERE ARE ONLY TWO HOURS ASSIGNABLE 
+                        if(docDetails.hour === min_doc_id) {
+                            for(j=min_slot_id; j<TOTAL_SLOTS; j++) {
+                                let asRow = [];
+                                slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
+                                let busyAssistants = docDetails[getTTFieldName(j)];
+                                //console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                                for(i=0; i<assistants.length; i++) {
+                                    //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                    //create row
+                                    if(typeof busyAssistants !== 'undefined'){
+                                        asRow[i] = !busyAssistants.includes(assistants[i]);
+                                    }else{
+                                        asRow[i] = true;
+                                    }
+                                }
+                                asMap[k] = asRow;
+                                k++;
+                            }
+                        }                    
+                        if(docDetails.hour === max_doc_id) {
+                            for(j=0; j<=max_slot_id; j++){                            
+                                let asRow = [];
+                                slots[k] = new DecodedTime(max_doc_id, j*10);   //j is slot
+                                let busyAssistants = docDetails[getTTFieldName(j)];
+                                //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
+                                for(i=0; i<assistants.length; i++) {
+                                    //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
+                                    //create row
+                                    if(typeof busyAssistants !== 'undefined'){
+                                        asRow[i] = !busyAssistants.includes(assistants[i]);
+                                    }else{
+                                        asRow[i] = true;
+                                    }
+                                }
+                                asMap[k] = asRow;
+                                k++;
+                            }
+                        }
                     }
-                }
-            });
+                });*/
+            }
             console.log("Generated table map: ");
             for(i=0; i<assistants.length; i++) {
                 var x = "";
