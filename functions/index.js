@@ -251,24 +251,11 @@ var getAvailableAssistant2 = function(address, service, time, exceptions) {
 }
 //***********************************************************************************
 
-/**
- * USERREQUESTHANDLER
- * -Triggered on Creation of new Request document
- * -Fetches fields 
- * -Gets available assistant
- * -sends her a request 
- */
-//better to get address from the packet than another db fetch i guess.
 exports.userRequestHandler = functions.firestore
     .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onCreate(requestModule.onCreateHandler);
 
-/**
- * ASSISTANTRESPONSEHANDLER
- * - Triggered when assistant responds to request
- * - creates a visit object if request approved
- * - restarts search for an assistant if refused by assistant
- */
+
 exports.assistantResponseHandler = functions.firestore
     .document('requests/{yearDoc}/{monthSubcollection}/{requestId}')
     .onUpdate(requestModule.onUpdateHandler);

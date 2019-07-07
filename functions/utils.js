@@ -36,6 +36,7 @@ const VISIT_STATUS_UPCOMING = 3;
 //
 const TOTAL_SLOTS = 6;
 const BUFFER_TIME = 1200;
+const REQUEST_STATUS_CHECK_TIMEOUT = 90000  //90 seconds
 const dummy1 = 'bhenbhaibhenbhai';
 const dummy2 = 'acxacxsexsexsex';
 const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
@@ -98,12 +99,27 @@ var sendAssitantRequest = function(requestId, request, assistant) {
                 setTimeout(() => {
                     console.log("Invoking routine Request status check for requestId: " + requestId);
                     checkRequestStatus(requestId, assistant._id);
-                }, 2*60*1000);
+                }, REQUEST_STATUS_CHECK_TIMEOUT);
                 return 1;
             })
             .catch(function(error) {
                 console.error("Request couldnt be sent: Request ID: " + requestId + "\n" + error);
                 //TODO
+                return 0;
+            });
+}
+
+var sendDataPayload = function(clientToken, payload) {
+    console.log("::sendDataPayload::INVOKED");
+    console.log("Sending Payload: " + payload.toString() + "\nto clientToken: " + clientToken);
+
+    return messaging.sendToDevice(clientToken, payload)
+            .then(function(response) {
+                console.log("Payload sent succesfully!");                
+                return 1;
+            })
+            .catch(function(error) {
+                console.error("Payload failed to be sent:" + error);
                 return 0;
             });
 }
@@ -203,5 +219,5 @@ module.exports = {
     REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,SERVICE_CLEANING,
     SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
     VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,dummy1,dummy2,dummy3,
-    DecodedTime,getServiceDuration,sendAssitantRequest,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName
+    DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName
 }

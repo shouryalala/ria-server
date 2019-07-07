@@ -1,16 +1,5 @@
 const util = require('./utils');
 const {db} = require('./admin');
-//const admin = require('firebase-admin');
-// try{
-//     admin.initializeApp({
-//         credential: admin.credential.cert(require('./serviceAccount.json')),  
-//         databaseURL: 'https://kanta-6f9f5.firebaseio.com'
-//     });
-//     //fix timestamps for firestore
-//     admin.firestore().settings({timestampsInSnapshots: true});
-// }catch(e){
-//     console.error("admin already initialized");
-// }
 
 /** 
  * @param {string} address 
@@ -234,71 +223,6 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                         }
                     }                    
                 });
-
-            /*    querySnapshot.forEach(doc => {
-                    console.log("Received docId: " + doc.id);
-                    const docDetails = doc.data();
-
-                    if(min_doc_id === max_doc_id) {  //only one document fetched
-                        for(j=min_slot_id; j<=max_slot_id; j++) {
-                            let asRow = [];
-                            slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
-                            let busyAssistants = docDetails[getTTFieldName(j)];
-                            //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
-                            for(i=0; i<assistants.length; i++) {
-                                //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
-                                //create row
-                                if(typeof busyAssistants !== 'undefined'){
-                                    asRow[i] = !busyAssistants.includes(assistants[i]);
-                                }else{
-                                    asRow[i] = true;
-                                }
-                            }
-                            asMap[k] = asRow;
-                            k++;
-                        }
-                    }else{
-                        //ASSUMES THERE ARE ONLY TWO HOURS ASSIGNABLE 
-                        if(docDetails.hour === min_doc_id) {
-                            for(j=min_slot_id; j<TOTAL_SLOTS; j++) {
-                                let asRow = [];
-                                slots[k] = new DecodedTime(min_doc_id, j*10);   //j is slot
-                                let busyAssistants = docDetails[getTTFieldName(j)];
-                                //console.log("Hour: " + min_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
-                                for(i=0; i<assistants.length; i++) {
-                                    //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
-                                    //create row
-                                    if(typeof busyAssistants !== 'undefined'){
-                                        asRow[i] = !busyAssistants.includes(assistants[i]);
-                                    }else{
-                                        asRow[i] = true;
-                                    }
-                                }
-                                asMap[k] = asRow;
-                                k++;
-                            }
-                        }                    
-                        if(docDetails.hour === max_doc_id) {
-                            for(j=0; j<=max_slot_id; j++){                            
-                                let asRow = [];
-                                slots[k] = new DecodedTime(max_doc_id, j*10);   //j is slot
-                                let busyAssistants = docDetails[getTTFieldName(j)];
-                                //console.log("Hour: " + max_doc_id + " ,Time Slot: " + j + " BAssistants: " + busyAssistants);
-                                for(i=0; i<assistants.length; i++) {
-                                    //console.log("Decoding slot: j:" + j + ",i: " + i + ",k: " + k);
-                                    //create row
-                                    if(typeof busyAssistants !== 'undefined'){
-                                        asRow[i] = !busyAssistants.includes(assistants[i]);
-                                    }else{
-                                        asRow[i] = true;
-                                    }
-                                }
-                                asMap[k] = asRow;
-                                k++;
-                            }
-                        }
-                    }
-                });*/
             }
             console.log("Generated table map: ");
             for(i=0; i<assistants.length; i++) {

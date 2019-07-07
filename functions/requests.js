@@ -2,6 +2,14 @@ const util = require('./utils');
 const schedular =  require('./schedular');
 const {db} = require('./admin');
 
+/**
+ * USERREQUESTHANDLER
+ * -Triggered on Creation of new Request document
+ * -Fetches fields 
+ * -Gets available assistant
+ * -sends her a request 
+ */
+//better to get address from the packet than another db fetch i guess.
 exports.onCreateHandler =  (snap, context) => {
     console.log("::userRequestHandler::INVOKED");    
     const requestObj = snap.data();
@@ -43,6 +51,12 @@ exports.onCreateHandler =  (snap, context) => {
 }        
 
 
+/**
+ * ASSISTANTRESPONSEHANDLER
+ * - Triggered when assistant responds to request
+ * - creates a visit object if request approved
+ * - restarts search for an assistant if refused by assistant
+ */
 exports.onUpdateHandler = (change, context) => {
     console.log("::assistantResponseHandler::INVOKED");
     const prev_data = change.before.data();
@@ -51,7 +65,7 @@ exports.onUpdateHandler = (change, context) => {
     //explicity check each condition before creating visit obj
     if(prev_data.asn_response !== util.AST_RESPONSE_ACCEPT && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
         after_data.asn_response === util.AST_RESPONSE_ACCEPT && after_data.status === util.REQ_STATUS_ASSIGNED) {
-        console.log("assistant accepted and assigned request. Creating visit obj");
+        console.log("Assistant accepted and assigned request. Creating visit obj");
         //TODO const end_time = getServiceEndTime
         const yearDocId = context.params.yearDoc;
         const subCollectionId = context.params.monthSubcollection;
@@ -67,12 +81,32 @@ exports.onUpdateHandler = (change, context) => {
             status: util.VISIT_STATUS_UPCOMING
         }
         return db.collection(util.COLN_VISITS).doc(yearDocId).collection(subCollectionId).add(visitObj).then(() => {
-            console.log("Created initial Visit object for requestID: " + requestDocId);                
-            //TODO inform user that the request was successful
-            return res.status(200).send("VISIT me in heaven!");
+            console.log("Created initial Visit object for requestID: " + requestDocId);
+            //Now fetch assistant details and send them to user along with request confirmation
+            return db.collection(util.COLN_USERS).doc(after_data.user_id).get().then(docSnapshot => {
+                let user = docSnapshot.data();
+                let clientToken = user.mClientToken;
+                let payload = {
+                    data: {
+                        ID: after_data.asn_id,                                                
+                        Date: after_data.date,
+                        Start_Time: after_data.req_time,        //TODO add end time?
+                        Command: COMMAND_REQUEST_CONFIRMED
+                    }
+                };
+                return util.sendDataPayload(clientToken, payload).then(flag => {
+                    if(flag === 0) {
+                        //TODO payload not sent
+                    }
+                });                
+            })
+            .catch(error => {
+                console.error("Error fetching user details: " + error);
+                return res.status(500).send("VISIT me in hell");
+            });
         })
         .catch((error) => {
-            console.log("Error creating visit obj: " + error);
+            console.error("Error creating visit obj: " + error);
             return res.status(500).send("VISIT me in hell");
         });
     }
