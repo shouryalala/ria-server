@@ -13,14 +13,22 @@ const {db} = require('./admin');
 exports.onCreateHandler =  (snap, context) => {
     console.log("::userRequestHandler::INVOKED");    
     const requestObj = snap.data();
-    const requestId = context.params.requestId;     //get request ID from wildcard
-    const monthId = context.params.monthSubcollectionId;
-    console.log("Request ID: " + requestId);
+    //const requestId = context.params.requestId;     //get request ID from wildcard
+    //const yearId = context.params.yearDocId;
+    //const monthId = context.params.monthSubcollectionId;
+
+    //create a request path
+    let requestPath = {
+        _id: context.params.requestId,
+        monthId: context.params.monthSubcollectionId,
+        yearId: context.params.yearDocId
+    }
+    console.log("REQUEST: {YearId: " + requestPath.yearId + ", MonthId: " + requestPath.monthId + ", Request ID: " + requestPath._id + "}");
     
     let st_time = parseInt(requestObj.req_time);
     let en_time = st_time + util.getServiceDuration(requestObj.service, null);
     
-    return schedular.getAvailableAssistant(requestObj.address, monthId, requestObj.date, st_time, en_time, null,null)
+    return schedular.getAvailableAssistant(requestObj.address, requestPath.monthId, requestObj.date, st_time, en_time, null,null)
         .then(function(assistant){                
             if(assistant === null) {
                 console.log("No available maids at the moment.");
@@ -30,7 +38,7 @@ exports.onCreateHandler =  (snap, context) => {
             
             console.log("Assistant details obtained: " + assistant._id + "\nSending assitant request..");            
 
-            return util.sendAssitantRequest(requestId, requestObj, assistant)
+            return util.sendAssitantRequest(requestPath, requestObj, assistant)
                 .then(function(response){
                     if(response === 1) {
                         console.log("Updating the snapshot's assignee.");
@@ -89,34 +97,31 @@ exports.onUpdateHandler = (change, context) => {
                 let payload = {
                     data: {
                         ID: after_data.asn_id,                                                
-                        Date: after_data.date,
-                        Start_Time: after_data.req_time,        //TODO add end time?
-                        Command: COMMAND_REQUEST_CONFIRMED
+                        Date: String(after_data.date),
+                        Start_Time: String(after_data.req_time),        //TODO add end time?
+                        Command: util.COMMAND_REQUEST_CONFIRMED
                     }
                 };
-                return util.sendDataPayload(clientToken, payload).then(flag => {
-                    if(flag === 0) {
-                        //TODO payload not sent
-                    }
-                });                
+                return util.sendDataPayload(clientToken, payload);
             })
             .catch(error => {
                 console.error("Error fetching user details: " + error);
-                return res.status(500).send("VISIT me in hell");
+                return 0;
             });
         })
         .catch((error) => {
             console.error("Error creating visit obj: " + error);
-            return res.status(500).send("VISIT me in hell");
+            return 0;
         });
     }
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
-        after_data.asn_response === util.AST_RESPONSE_REJECT && after.status !== util.REQ_STATUS_ASSIGNED){
+        after_data.asn_response === util.AST_RESPONSE_REJECT && after_data.status !== util.REQ_STATUS_ASSIGNED){
         //Log/penalize rejection and reroute request
         console.log("Assistant rejected response. Logging rejection and reroute request");
         //TODO
-        return res.status(200).send("Request rejected");
+        return 1;
     }
-    return res.status(200).send("All okay. no assitant code block triggered");
+    console.log("All okay. no assitant code block triggered")
+    return 1;
 }

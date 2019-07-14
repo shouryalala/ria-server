@@ -17,7 +17,9 @@ const REQ_STATUS_UNASSIGNED = "UNA";
 const AST_RESPONSE_NIL = "NIL";
 const AST_RESPONSE_ACCEPT = "ACCEPT";
 const AST_RESPONSE_REJECT = "REJECT";
+//Payload commands
 const COMMAND_WORK_REQUEST = "WRDP";
+const COMMAND_REQUEST_CONFIRMED = "RQDP";
 //Service decodes
 const SERVICE_CLEANING = "Cx";
 const SERVICE_DUSTING = "Dx";
@@ -74,16 +76,16 @@ var getServiceDuration = function(service, bhk) {
 
 /**
  * SENDASSISTANTREQUEST
- * @param {string} requestId
- * @param {service, address, time} request 
- * @param {name, instanceId, assId} assistant 
+ * @param {yearId: string, monthId: string, _id: string} requestPath
+ * @param {service, address, time} request (contains entire request Obj)
+ * @param {_id: string, clientToken: string, freeSlotLib: DecodedTime[]} assistant 
  */
-var sendAssitantRequest = function(requestId, request, assistant) {
+var sendAssitantRequest = function(requestPath, request, assistant) {
     console.log("::sendAssitantRequest::INVOKED");        
     console.log("Encoded time: " + assistant.freeSlotLib[0].encode());
     const payload = {
         data: {
-            RID: requestId,
+            RID: requestPath._id,
             Service: request.service,
             Address: request.address,
             Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
@@ -91,19 +93,19 @@ var sendAssitantRequest = function(requestId, request, assistant) {
         }
     };
 
-    console.log("Attempting to send the request to assistant. Request ID: " + requestId + "to Assistant: " + assistant._id);
+    console.log("Attempting to send the request to assistant. Request ID: " + requestPath._id + "to Assistant: " + assistant._id);
     //send payload to assistant        
     return messaging.sendToDevice(assistant.clientToken, payload)
             .then(function(response) {
-                console.log("Request sent succesfully! Request ID: " + requestId);
+                console.log("Request sent succesfully! Request ID: " + requestPath._id);
                 setTimeout(() => {
                     console.log("Invoking routine Request status check for requestId: " + requestId);
-                    checkRequestStatus(requestId, assistant._id);
+                    checkRequestStatus(requestPath, assistant._id);
                 }, REQUEST_STATUS_CHECK_TIMEOUT);
                 return 1;
             })
             .catch(function(error) {
-                console.error("Request couldnt be sent: Request ID: " + requestId + "\n" + error);
+                console.error("Request couldnt be sent: Request ID: " + requestPath._id + "\nError: " + error);
                 //TODO
                 return 0;
             });
@@ -126,15 +128,15 @@ var sendDataPayload = function(clientToken, payload) {
 
 /**
  * CHECKREQUESTSTATUS
- * @param {string} rId (request ID)
+ * @param {yearId: string, monthId: string, _id: string} requestPath
  * @param {string} assId (assistant ID)
  * 
  * method checks whether assistant has responded to request or not after waiting for a period of time. 
  * -if not, restart request handling process
  */
-var checkRequestStatus = function(rId, assId) {
+var checkRequestStatus = function(requestPath, assId) {
     console.log("::checkRequestStatus::INVOKED");
-    db.collection(COL_REQUEST).doc(rId).get().then(doc => {
+    db.collection(COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).get().then(doc => {
         const aDoc = doc.data();
         if(aDoc.asn_id === null && aDoc.asn_response === null) {
             console.error("Request has no assignee yet!");
@@ -144,7 +146,7 @@ var checkRequestStatus = function(rId, assId) {
             if(aDoc.asn_response === AST_RESPONSE_NIL){
                 //the assigned assistant is still the same and the her response is still nil
                 //Houston we have a problem
-                console.log("Request: " + rId + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");
+                console.log("Request: " + requestPath._id + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");
                 return 0;
                 //TODO
             }else if(aDoc.asn_response === AST_RESPONSE_ACCEPT){
@@ -153,16 +155,16 @@ var checkRequestStatus = function(rId, assId) {
                 return 1;
             }else{
                 //should never happen. corner case when request is in process of being rerouted and gets caught by this method
-                console.error("Request: " + rId + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.");
+                console.error("Request: " + requestPath._id + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.");
                 return 0;
             }
         }else{
-            console.log("checkRequestStatus for RequestId: " + rId + ", AssistantId: " + assId + " outdated. Request reassigned.");
+            console.log("checkRequestStatus for RequestId: " + requestPath._id + ", AssistantId: " + assId + " outdated. Request reassigned.");
             return 1;
         }
     })
     .catch(error => {
-        console.log("Error in retrieving record");
+        console.error("Error in retrieving record: " + error);
         return 0;
     });
 }
@@ -216,8 +218,8 @@ var getTTFieldName = function(n){
 
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,
-    REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,SERVICE_CLEANING,
-    SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
+    REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,
+    SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
     VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,dummy1,dummy2,dummy3,
     DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName
 }

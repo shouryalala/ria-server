@@ -182,13 +182,13 @@ exports.setArrayToDocument = functions.https.onRequest((req, res) => {
 exports.createDummyRequest = functions.https.onRequest((req, res) => {
     console.log("::createDummyRequest::INVOKED");
     const yearDoc = "2019";
-    const monthSubCollection = "JUN"; 
+    const monthSubCollection = "JUL"; 
     var packet = {
         user_id: "9986643444",
         service: req.query.service,
         date: new Date().getDate(),
         address:req.query.address,
-        society_id: "bvp",
+        society_id: "bnx",
         asn_response: util.AST_RESPONSE_NIL,        
         status: util.REQ_STATUS_UNASSIGNED,
         req_time: parseInt(req.query.time),     //in secs since 12

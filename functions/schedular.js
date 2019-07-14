@@ -142,8 +142,8 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
     var min_slot_id = st_time_dec.getSlot();
     var max_slot_id = en_time_dec.getSlot();
 
-    console.log("Generated Timeline Details: \nMin: (Doc ID: " + min_doc_id + ", Slot ID: " + min_slot_id 
-        + ")\nMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
+    console.log("Generated Timeline Details:  Min: (Doc ID: " + min_doc_id + ", Slot ID: " + min_slot_id 
+        + ")\tMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
 
     return db.collection(util.COLN_TIMETABLE).doc(docId).get().then(docSnapshot => {
         var assistant_list = docSnapshot.data();
