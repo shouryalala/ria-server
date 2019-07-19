@@ -75,6 +75,16 @@ var getServiceDuration = function(service, bhk) {
 }
 
 /**
+ * SORTSLOTSBYHOUR
+ * @param {DecodedTime} slots 
+ * slots= {(5,40),(5,50),(6,0),(6,10)}
+ * To be returned: sortSlots: {(5:[40,50]),(6:0,10)}
+ */
+var sortSlotsByHour = function(slots){
+    //TODO
+} 
+
+/**
  * SENDASSISTANTREQUEST
  * @param {yearId: string, monthId: string, _id: string} requestPath
  * @param {service, address, time} request (contains entire request Obj)
@@ -113,7 +123,8 @@ var sendAssitantRequest = function(requestPath, request, assistant) {
 
 var sendDataPayload = function(clientToken, payload) {
     console.log("::sendDataPayload::INVOKED");
-    console.log("Sending Payload: " + payload.toString() + "\nto clientToken: " + clientToken);
+    console.log(payload);
+    console.log("Sending Payload: " + payload + "\nto clientToken: " + clientToken);
 
     return messaging.sendToDevice(clientToken, payload)
             .then(function(response) {
@@ -216,10 +227,14 @@ var getTTFieldName = function(n){
     }
 }
 
+var getTTPathName = function(yearId, monthId, date, hour) {
+    return yearId+monthId+String(date)+"_"+String(hour);
+}
+
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,
     REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,
     SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
     VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,dummy1,dummy2,dummy3,
-    DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName
+    DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName,getTTPathName
 }

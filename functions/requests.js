@@ -34,27 +34,31 @@ exports.onCreateHandler =  (snap, context) => {
                 console.log("No available maids at the moment.");
                 //TODO
                 return 0;
-            }
-            
-            console.log("Assistant details obtained: " + assistant._id + "\nSending assitant request..");            
-
-            return util.sendAssitantRequest(requestPath, requestObj, assistant)
-                .then(function(response){
-                    if(response === 1) {
-                        console.log("Updating the snapshot's assignee.");
-                        return snap.ref.set({
-                            asn_id: assistant._id,
-                            asn_response: util.AST_RESPONSE_NIL     //Can be set by client
-                        }, {merge: true});
-                    }else{
-                        console.error("Recevied error tag from :sendAssistantRequest: method");
+            }            
+            console.log("Assistant details obtained: " + assistant._id + "\nBooking assitant schedule.");
+            const slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
+            return schedular.bookAssistantSlot(assistant._id, requestPath.monthId, requestObj.date, slotRef).then(flag => {
+                if(flag === 1) {
+                    return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
+                        if(response === 1) {
+                            console.log("Updating the snapshot's assignee.");
+                            return snap.ref.set({
+                                asn_id: assistant._id,
+                                asn_response: util.AST_RESPONSE_NIL,     //Can be set by client //TODO add slotref
+                                slotRef: slotRef
+                            }, {merge: true});
+                        }else{
+                            console.error("Recevied error tag from :sendAssistantRequest: method");
+                            return 0;
+                        }
+                    }, error => {
+                        console.error("Recevied error tag from :sendAssistantRequest: method: " + error);
                         return 0;
-                    }
-            }, function(error){
-                console.error("Recevied error tag from :sendAssistantRequest: method: " + error);
-                return 0;
-            });
+                    });
+                }
+            }, error => {
 
+            });
         });       
 }        
 

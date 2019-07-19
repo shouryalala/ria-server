@@ -278,3 +278,54 @@ var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
     console.log("::getFreeAssistantFromWindow: Didnt find a free Assistant in this window.");
     return null;
 }
+
+/**
+ * BOOKASSISTANTSLOT 
+ * assign assistant Id to the designated slots in the timetable
+ * @param {string} zoneId 
+ * @param {string} monthId 
+ * @param {number} date  
+ * @param {string} assId 
+ * @param {DecodedTime[]} slots 
+ * 
+ * things to keep in mind:
+ * - What to do if transaction fails
+ * - What to do if more than one hour affected
+ * - What to do if null parameter
+ */
+// var bookAssistantSlot = function(zoneId, monthId, date, slots, assId) {
+//     let ttRef = db.collection(COLN_TIMETABLE).doc(zoneId).collection(monthId);    
+//     //get min and max hour
+//     if(slots !== null) {
+//         //sort slots{(5,4)(5,5)(6,1)} into {(5=>[4,5])(6=>[1])}
+        
+
+
+
+//         let tHour = -1;
+//         slots.forEach(function(slot){
+//             if(slot.getHours() === tHour){
+
+//             }
+//             var sDoc = ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)).get()
+//                 .then(docSnapShot => {
+
+//                     if(docSnapShot.exists) {
+
+//                     }else{
+//                         let dObj = {
+//                             date: date,
+//                             hour: hour,
+//                             getTTFieldName(slot.getSlot()): 
+//                         }
+//                     }
+//                 })
+//                 .catch(error => {
+
+//                 });
+//         });
+//     }
+//     else{
+//         console.error()
+//     }
+// }

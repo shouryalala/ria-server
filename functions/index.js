@@ -76,6 +76,28 @@ exports.sendNotification = functions.https.onRequest((req, res) => {
     end();
 });
 
+
+exports.createJsObject = functions.https.onRequest((req, res) => {
+    var docRef = db.collection("appts").doc();
+    const lsd = {
+        5: [4,5],
+        6: [0,1],
+        7: [3,4,5]
+    }
+
+    var packetF = {
+        id: "peace on the ground",
+        slotRef: lsd
+    }
+
+    return docRef.set(packetF).then(ress => {
+        return res.status(200).send("Foxygen was a success");
+    }).catch(error => {
+        return res.status(500).send("Foxygen failed");
+    });
+});
+
+
 //BOILERPLATE FUNCTION
 exports.sendDataPacket = functions.https.onRequest((req, res) => {
 	const service = req.query.service;
