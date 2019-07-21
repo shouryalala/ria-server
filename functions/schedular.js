@@ -1,5 +1,5 @@
 const util = require('./utils');
-const {db} = require('./admin');
+const {db, fieldValue} = require('./admin');
 
 /** 
  * @param {string} address 
@@ -18,8 +18,7 @@ const {db} = require('./admin');
  */
 exports.getAvailableAssistant = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED::Params{date: " + date + ", st_time: " 
-    + st_time + ", en_time: " + en_time + ", exceptions: " + exceptions + ", forceAssistant: " + forceAssistant + "}");
-    const docId = '2019_z23';
+    + st_time + ", en_time: " + en_time + ", exceptions: " + exceptions + ", forceAssistant: " + forceAssistant + "}");    
     //const buffer_secs = 1200;
     /**
      * Time management:
@@ -51,7 +50,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
         st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
     }
     //var timetableNslots = getTimetable
-    return getTimetable(docId, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant).then(res => {
+    return getTimetable(util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant).then(res => {
         if(res === 0) {
             console.error("Received an error from getTimetable. Exiting method");
             return 0;
@@ -293,39 +292,72 @@ var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
  * - What to do if more than one hour affected
  * - What to do if null parameter
  */
-// var bookAssistantSlot = function(zoneId, monthId, date, slots, assId) {
-//     let ttRef = db.collection(COLN_TIMETABLE).doc(zoneId).collection(monthId);    
-//     //get min and max hour
-//     if(slots !== null) {
-//         //sort slots{(5,4)(5,5)(6,1)} into {(5=>[4,5])(6=>[1])}
-        
-
-
-
-//         let tHour = -1;
-//         slots.forEach(function(slot){
-//             if(slot.getHours() === tHour){
-
-//             }
-//             var sDoc = ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)).get()
-//                 .then(docSnapShot => {
-
-//                     if(docSnapShot.exists) {
-
-//                     }else{
-//                         let dObj = {
-//                             date: date,
-//                             hour: hour,
-//                             getTTFieldName(slot.getSlot()): 
-//                         }
-//                     }
-//                 })
-//                 .catch(error => {
-
-//                 });
-//         });
-//     }
-//     else{
-//         console.error()
-//     }
-// }
+exports.bookAssistantSlot = async (zoneId, monthId, date, hours_slots, assId) => {
+    console.log("::BOOKASSISTANTSLOT::INVOKED::Params:");
+    let ttRef = db.collection(util.COLN_TIMETABLE).doc(zoneId).collection(monthId);
+    //get min and max hour
+    if(hours_slots === undefined ) {
+        return 0;
+    }
+    for(hour in hours_slots) {
+        console.log("BookAssistantSlot: Slot: " + hours_slots[hour]);
+        //if(hours_slots.hasOwnProperty(hour)) {
+        let slots = hours_slots[hour];        
+        if(slots !== undefined){            
+            try{              
+                /* eslint-disable no-await-in-loop */
+                let hPath = util.getTTPathName(zoneId, monthId, date, hour);
+                var hSnapshot = await ttRef.doc(hPath).get();
+                var updateObj = {};
+                if(hSnapshot.exists) {
+                    //found the document, now update the fields
+                    var hDoc = hSnapshot.data();                    
+                    console.log("Existing schedule for date: " + date + ", hour: " + hour);
+                    console.log(hDoc);
+                    for(s in slots){
+                        let field_name = util.getTTFieldName(slots[s]);
+                        if(hDoc[field_name] === undefined) {
+                            console.log("Slot: " + field_name + " absent. Creating new array.");
+                            updateObj[field_name] = [assId];
+                        }
+                        else if(hDoc[field_name].includes(assId)){
+                            console.error("DISASTER! Assistant is preoccupied during current slot: (Assistant: "
+                                 + assId + ",Slot: " + slots[s] + ")");
+                            //TODO throw error                            
+                        }
+                        else{
+                            console.log("Update field set for slot: " + field_name);
+                            updateObj[field_name] = fieldValue.arrayUnion(assId);
+                        }
+                    }
+                    console.log("Generated update object for existing hour doc: ");
+                    console.log(updateObj);
+                }
+                else{
+                    console.log("No existing schedule for date: " + date + ", hour: " + hour);
+                    //make a new document and add the schedule
+                    updateObj['date'] = date;
+                    updateObj['hour'] = parseInt(hour);
+                    //add assistant id to each slot in the current hour doc
+                    for(s in slots) {
+                        let field_name = util.getTTFieldName(slots[s]);
+                        updateObj[field_name] = [assId];
+                    }
+                    console.log("Generated schedule object to be pushed: ");
+                    console.log(updateObj);
+                }
+                /* eslint-enable no-await-in-loop */
+                ttRef.doc(hPath).set(updateObj, {merge: true}).then(response => {
+                    console.log("Schedule updated succesfully. Your day was fruitful");
+                    return 1;
+                })
+                .catch(error =>{
+                    console.error("Schedule object update failed :(");
+                    return 0;
+                });
+            }catch(error) {
+                console.error("Entered await catch block");
+            }
+        }
+    }    
+}

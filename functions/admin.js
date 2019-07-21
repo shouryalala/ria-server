@@ -10,5 +10,6 @@ admin.firestore().settings({timestampsInSnapshots: true});
 const db = admin.firestore();
 const auth = admin.auth();
 const messaging = admin.messaging();
+const fieldValue = admin.firestore.FieldValue;
 
-module.exports = { db, auth, messaging }
+module.exports = { db, auth, messaging, fieldValue }

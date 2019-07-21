@@ -29,35 +29,42 @@ exports.onCreateHandler =  (snap, context) => {
     let en_time = st_time + util.getServiceDuration(requestObj.service, null);
     
     return schedular.getAvailableAssistant(requestObj.address, requestPath.monthId, requestObj.date, st_time, en_time, null,null)
-        .then(function(assistant){                
-            if(assistant === null) {
+        .then(assistant => {
+            if(assistant._id === undefined || assistant.freeSlotLib === undefined) {
                 console.log("No available maids at the moment.");
                 //TODO
                 return 0;
-            }            
-            console.log("Assistant details obtained: " + assistant._id + "\nBooking assitant schedule.");
+            }
+            console.log("Assistant details obtained: " + assistant._id + "Booking assitant schedule.");
+            console.log(assistant.freeSlotLib);
             const slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
-            return schedular.bookAssistantSlot(assistant._id, requestPath.monthId, requestObj.date, slotRef).then(flag => {
+            return schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef,assistant._id).then(flag => {
                 if(flag === 1) {
                     return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
                         if(response === 1) {
                             console.log("Updating the snapshot's assignee.");
                             return snap.ref.set({
                                 asn_id: assistant._id,
-                                asn_response: util.AST_RESPONSE_NIL,     //Can be set by client //TODO add slotref
+                                asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
                                 slotRef: slotRef
                             }, {merge: true});
                         }else{
-                            console.error("Recevied error tag from :sendAssistantRequest: method");
-                            return 0;
+                            let er = {msg: "Failed to send request"};
+                            throw er;
                         }
                     }, error => {
-                        console.error("Recevied error tag from :sendAssistantRequest: method: " + error);
+                        console.error("Recevied error tag from :sendAssistantRequest: " + error);
                         return 0;
                     });
                 }
+                else{
+                    console.log("else block");
+                    let er = {msg: "Failed to book slots: " + assistant._id + " Slots: " + slotRef};
+                    throw er;
+                }
             }, error => {
-
+                console.error("Received error tag from :bookAssistantSlot: " + error);
+                return 0;
             });
         });       
 }        

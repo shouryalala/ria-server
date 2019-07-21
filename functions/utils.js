@@ -38,6 +38,7 @@ const VISIT_STATUS_UPCOMING = 3;
 //
 const TOTAL_SLOTS = 6;
 const BUFFER_TIME = 1200;
+const ALPHA_ZONE_ID = '2019_z23';
 const REQUEST_STATUS_CHECK_TIMEOUT = 90000  //90 seconds
 const dummy1 = 'bhenbhaibhenbhai';
 const dummy2 = 'acxacxsexsexsex';
@@ -81,7 +82,21 @@ var getServiceDuration = function(service, bhk) {
  * To be returned: sortSlots: {(5:[40,50]),(6:0,10)}
  */
 var sortSlotsByHour = function(slots){
-    //TODO
+    console.log(slots);
+    var sRef = {};
+    for(s in slots) {
+        console.log("Slot: " + slots[s].toString());
+        let slot = slots[s];
+        if(sRef[slot.getHours()] === undefined) {
+            sRef[slot.getHours()] = [slot.getSlot()];
+        }
+        else if(!sRef[slot.getHours()].includes(slot.getSlot())){
+            sRef[slot.getHours()].push(slot.getSlot());
+        }
+    }
+    console.log("Created Object from sortSlotsByHour: ----");
+    console.log(sRef);
+    return sRef;
 } 
 
 /**
@@ -106,7 +121,7 @@ var sendAssitantRequest = function(requestPath, request, assistant) {
     console.log("Attempting to send the request to assistant. Request ID: " + requestPath._id + "to Assistant: " + assistant._id);
     //send payload to assistant        
     return messaging.sendToDevice(assistant.clientToken, payload)
-            .then(function(response) {
+            .then(response => {
                 console.log("Request sent succesfully! Request ID: " + requestPath._id);
                 setTimeout(() => {
                     console.log("Invoking routine Request status check for requestId: " + requestId);
@@ -114,7 +129,7 @@ var sendAssitantRequest = function(requestPath, request, assistant) {
                 }, REQUEST_STATUS_CHECK_TIMEOUT);
                 return 1;
             })
-            .catch(function(error) {
+            .catch(error => {
                 console.error("Request couldnt be sent: Request ID: " + requestPath._id + "\nError: " + error);
                 //TODO
                 return 0;
@@ -127,11 +142,11 @@ var sendDataPayload = function(clientToken, payload) {
     console.log("Sending Payload: " + payload + "\nto clientToken: " + clientToken);
 
     return messaging.sendToDevice(clientToken, payload)
-            .then(function(response) {
+            .then(response => {
                 console.log("Payload sent succesfully!");                
                 return 1;
             })
-            .catch(function(error) {
+            .catch(error => {
                 console.error("Payload failed to be sent:" + error);
                 return 0;
             });
@@ -228,6 +243,7 @@ var getTTFieldName = function(n){
 }
 
 var getTTPathName = function(yearId, monthId, date, hour) {
+    console.log("TTPathName: " + yearId+monthId+String(date)+"_"+String(hour));
     return yearId+monthId+String(date)+"_"+String(hour);
 }
 
@@ -235,6 +251,6 @@ module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,
     REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,
     SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
-    VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,dummy1,dummy2,dummy3,
+    VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,sortSlotsByHour,
     DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,verifyTime,getTTFieldName,getTTPathName
 }
