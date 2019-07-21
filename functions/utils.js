@@ -82,10 +82,10 @@ var getServiceDuration = function(service, bhk) {
  * To be returned: sortSlots: {(5:[40,50]),(6:0,10)}
  */
 var sortSlotsByHour = function(slots){
-    console.log(slots);
+    //console.log(slots);
     var sRef = {};
     for(s in slots) {
-        console.log("Slot: " + slots[s].toString());
+        //console.log("Slot: " + slots[s].toString());
         let slot = slots[s];
         if(sRef[slot.getHours()] === undefined) {
             sRef[slot.getHours()] = [slot.getSlot()];
@@ -94,8 +94,7 @@ var sortSlotsByHour = function(slots){
             sRef[slot.getHours()].push(slot.getSlot());
         }
     }
-    console.log("Created Object from sortSlotsByHour: ----");
-    console.log(sRef);
+    console.log("After sortSlotsByHour:", sRef);    
     return sRef;
 } 
 
@@ -211,15 +210,17 @@ var decodeHourMinFromTime = function(time) {
     var hr =  Math.trunc(time/3600);
     var prod = time/60;
     var min_raw = prod%60;
-    //console.log("Decoded raw time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
+   // console.log("Decoded raw time for " + time + ": Hour: " + hr + ", Min: " + min_raw);
     //round minutes to nearest 10 if not done already
     var min_trunc = Math.round(min_raw/10);    
     var mn = min_trunc*10;
-    if(min_trunc === 60) {
+    console.log(hr," ", prod, " ", min_raw, " ", min_trunc, " ", mn);
+    if(mn === 60) {
         hr += 1;
         mn = 0;    
     }
-    //console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
+   // console.log(hr," ", prod, " ", min_raw, " ", min_trunc, " ", mn);
+   //console.log("Time after rounding: Hour: " + hr + ", Min: " + mn);
     //TODO Can hour ever be 24?
     //var time_decoded = {hour:hr,min:mn};
     return new DecodedTime(hr, mn);

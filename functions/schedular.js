@@ -292,72 +292,83 @@ var getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
  * - What to do if more than one hour affected
  * - What to do if null parameter
  */
-exports.bookAssistantSlot = async (zoneId, monthId, date, hours_slots, assId) => {
-    console.log("::BOOKASSISTANTSLOT::INVOKED::Params:");
-    let ttRef = db.collection(util.COLN_TIMETABLE).doc(zoneId).collection(monthId);
-    //get min and max hour
-    if(hours_slots === undefined ) {
+exports.bookAssistantSlot = (zoneId, monthId, date, hours_slots, assId) => {
+    console.log("::BOOKASSISTANTSLOT::INVOKED::Params: ",zoneId, monthId, date, hours_slots, assId);
+    if(zoneId === undefined || monthId === undefined || date === undefined || hours_slots === undefined || assId === undefined ) {
         return 0;
     }
-    for(hour in hours_slots) {
-        console.log("BookAssistantSlot: Slot: " + hours_slots[hour]);
-        //if(hours_slots.hasOwnProperty(hour)) {
-        let slots = hours_slots[hour];        
-        if(slots !== undefined){            
-            try{              
-                /* eslint-disable no-await-in-loop */
-                let hPath = util.getTTPathName(zoneId, monthId, date, hour);
-                var hSnapshot = await ttRef.doc(hPath).get();
-                var updateObj = {};
-                if(hSnapshot.exists) {
-                    //found the document, now update the fields
-                    var hDoc = hSnapshot.data();                    
-                    console.log("Existing schedule for date: " + date + ", hour: " + hour);
-                    console.log(hDoc);
-                    for(s in slots){
-                        let field_name = util.getTTFieldName(slots[s]);
-                        if(hDoc[field_name] === undefined) {
-                            console.log("Slot: " + field_name + " absent. Creating new array.");
+    let ttRef = db.collection(util.COLN_TIMETABLE).doc(zoneId).collection(monthId);
+    return db.runTransaction(async transaction => {
+        let updateObjList = {};
+        //First carry out all the reads and generate the write objects
+        console.log("Carrying out Transaction: ", hours_slots);
+        for(hour in hours_slots) {            
+            //if(hours_slots.hasOwnProperty(hour)) {
+            let slots = hours_slots[hour];
+            if(slots !== undefined){            
+                try{              
+                    /* eslint-disable no-await-in-loop */                    
+                    var hSnapshot = await transaction.get(ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)));
+                    let updateObj = {};
+                    if(hSnapshot.exists) {
+                        //found the document, now update the fields
+                        var hDoc = hSnapshot.data();                    
+                        console.log("Existing schedule for date: " + date + ", hour: " + hour, hDoc);                        
+                        for(s in slots){
+                            let field_name = util.getTTFieldName(slots[s]);
+                            if(hDoc[field_name] === undefined) {
+                                console.log("Slot: " + field_name + " absent. Creating new array.");
+                                updateObj[field_name] = [assId];
+                            }
+                            else if(hDoc[field_name].includes(assId)){
+                                console.error("DISASTER! Assistant is preoccupied during current slot: (Assistant: " + assId + ",Slot: " + slots[s] + ")");
+                                //TODO throw error
+                                return Promise.reject(new Error("Assistant was preoccupied"));
+                            }
+                            else{
+                                console.log("Update field set for slot: ", field_name);
+                                updateObj[field_name] = fieldValue.arrayUnion(assId);
+                            }
+                        }
+                        console.log("Generated update object for existing hour doc: ", updateObj);
+                    }
+                    else{
+                        console.log("No existing schedule for date: " + date + ", hour: " + hour);
+                        //make a new document and add the schedule
+                        updateObj['date'] = date;
+                        updateObj['hour'] = parseInt(hour);
+                        //add assistant id to each slot in the current hour doc
+                        for(s in slots) {
+                            let field_name = util.getTTFieldName(slots[s]);
                             updateObj[field_name] = [assId];
                         }
-                        else if(hDoc[field_name].includes(assId)){
-                            console.error("DISASTER! Assistant is preoccupied during current slot: (Assistant: "
-                                 + assId + ",Slot: " + slots[s] + ")");
-                            //TODO throw error                            
-                        }
-                        else{
-                            console.log("Update field set for slot: " + field_name);
-                            updateObj[field_name] = fieldValue.arrayUnion(assId);
-                        }
+                        console.log("Generated schedule object to be pushed: ", updateObj);
                     }
-                    console.log("Generated update object for existing hour doc: ");
-                    console.log(updateObj);
+                    updateObjList[hour] = updateObj;
+                    /* eslint-enable no-await-in-loop */                    
+                }catch(error) {
+                    console.error("Entered transaction catch block", error);
                 }
-                else{
-                    console.log("No existing schedule for date: " + date + ", hour: " + hour);
-                    //make a new document and add the schedule
-                    updateObj['date'] = date;
-                    updateObj['hour'] = parseInt(hour);
-                    //add assistant id to each slot in the current hour doc
-                    for(s in slots) {
-                        let field_name = util.getTTFieldName(slots[s]);
-                        updateObj[field_name] = [assId];
-                    }
-                    console.log("Generated schedule object to be pushed: ");
-                    console.log(updateObj);
-                }
-                /* eslint-enable no-await-in-loop */
-                ttRef.doc(hPath).set(updateObj, {merge: true}).then(response => {
-                    console.log("Schedule updated succesfully. Your day was fruitful");
-                    return 1;
-                })
-                .catch(error =>{
-                    console.error("Schedule object update failed :(");
-                    return 0;
-                });
-            }catch(error) {
-                console.error("Entered await catch block");
             }
         }
-    }    
+        
+        //Now write all the hour documents created from the above reads
+        /* eslint-disable no-await-in-loop */    
+        /* eslint-disable require-atomic-updates */    
+        console.log("Transaction Write: ", updateObjList);
+        for(hour in hours_slots) {
+            if(updateObjList[hour] !== undefined) {                
+                await transaction.set(ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)), updateObjList[hour], {merge: true});
+            }
+        }        
+        /* eslint-enable no-await-in-loop */    
+        /* eslint-enable require-atomic-updates */
+        return Promise.resolve("All documents atomically updated!");
+    }).then(result => {
+        console.log("Transaction success: ", result);
+        return 1;
+    }).catch(error => {
+        console.error("Transaction error: ", error);
+        return 0;
+    });
 }
