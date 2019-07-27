@@ -165,7 +165,7 @@ var getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
                 console.log("Exceptions list item: " + rAssistant);
                 for(let i=0; i<assistants.length; i++) {
                     if(assistants[i] === rAssistant){
-                        console.log(assistant[i] + " removed from list");
+                        console.log(assistants[i] + " removed from list");
                         assistants.splice(i,1);
                     }
                 }
@@ -371,4 +371,65 @@ exports.bookAssistantSlot = (zoneId, monthId, date, hours_slots, assId) => {
         console.error("Transaction error: ", error);
         return 0;
     });
+}
+
+exports.unbookAssistantSlot = (zoneId, monthId, date, hours_slots, assId) => {
+    console.log("::UNBOOKASSISTANTSLOT::INVOKED::Params: ",zoneId, monthId, date, hours_slots, assId);
+    if(zoneId === undefined || monthId === undefined || date === undefined || hours_slots === undefined || assId === undefined ) {
+        return 0;
+    }
+    let ttRef = db.collection(util.COLN_TIMETABLE).doc(zoneId).collection(monthId);
+    return db.runTransaction(async transaction => {
+        let updateObjList = {};
+        //First carry out all the reads and generate the write objects
+        console.log("Carrying out Transaction: ", hours_slots);
+        for(hour in hours_slots) {            
+            let slots = hours_slots[hour];
+            if(slots !== undefined){            
+                try{              
+                    /* eslint-disable no-await-in-loop */                    
+                    var hSnapshot = await transaction.get(ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)));
+                    let updateObj = {};
+                    if(!hSnapshot.exists) {
+                        console.error("Unbooking slots failed. Document not available.", hour);
+                        return Promise.reject(new Error("Unbooking slots failed. Document not available."));
+                    }
+                    let dDoc = hSnapshot.data();
+                    for(s in slots) {
+                        let field_name = util.getTTFieldName(slots[s]);
+                        if(dDoc[field_name] === undefined || !dDoc[field_name].includes(assId)) {
+                            console.error("Unbooking slots failed. Invalid field contents. ", field_name, dDoc[field_name]);
+                            return Promise.reject(new Error("Unbooking slots failed. Invalid field contents. "))
+                        }
+                        else{
+                            updateObj[field_name] = fieldValue.arrayRemove(assId);
+                        }
+                    }
+                    updateObjList[hour] = updateObj;
+                    /* eslint-enable no-await-in-loop */   
+                }catch(error){
+                    console.error("Entered transaction catch block", error);
+                }
+            }            
+        }
+
+        //Now update all the hour documents created from the above reads
+        /* eslint-disable no-await-in-loop */    
+        /* eslint-disable require-atomic-updates */    
+        console.log("Transaction Write: ", updateObjList);
+        for(hour in hours_slots) {
+            if(updateObjList[hour] !== undefined) {                
+                await transaction.set(ttRef.doc(util.getTTPathName(zoneId, monthId, date, hour)), updateObjList[hour], {merge: true});
+            }
+        }        
+        /* eslint-enable no-await-in-loop */    
+        /* eslint-enable require-atomic-updates */
+        return Promise.resolve("All documents atomically updated!");
+    }).then(result => {
+        console.log("Transaction success: ", result);
+        return 1;
+    }).catch(error => {
+        console.error("Transaction error: ", error);
+        return 0;
+    }); 
 }

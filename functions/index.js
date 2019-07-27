@@ -279,7 +279,7 @@ exports.userRequestHandler = functions.firestore
 
 
 exports.assistantResponseHandler = functions.firestore
-    .document('requests/{yearDoc}/{monthSubcollection}/{requestId}')
+    .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onUpdate(requestModule.onUpdateHandler);
 
 
