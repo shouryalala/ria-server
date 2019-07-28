@@ -22,8 +22,9 @@ exports.onCreateHandler =  (snap, context) => {
     }
     console.log("REQUEST: {YearId: " + requestPath.yearId + ", MonthId: " + requestPath.monthId + ", Request ID: " + requestPath._id + "}");   
     
-    
-    return requestAssistantService(requestPath, requestObj, null,null);
+    console.log(requestObj);
+    console.log(requestObj.exceptions);
+    return requestAssistantService(requestPath, requestObj);
 }        
 
 
@@ -90,53 +91,68 @@ exports.onUpdateHandler = async (change, context) => {
     }
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
-        after_data.asn_response === util.AST_RESPONSE_REJECT && after_data.status !== util.REQ_STATUS_ASSIGNED){
-        //Log/penalize rejection and reroute request
-        console.log("Assistant rejected response. Logging rejection and rerouting request");
-        let rPayload = {
-            requestId: requestPath._id,
-            a_id: after_data.asn_id
-        };
-        try{
-            let rejectionPromise = await db.collection(util.COLN_ASSISTANT_REJECTIONS).doc(requestPath.yearId).collection(requestPath.monthId).doc().set(rPayload);
-            console.log("Rejection Promise: ", rejectionPromise);
-        }catch(error){
-            console.error("Error adding new document to assistant_rejections ", error);
-        }
-        /**         
-         * - revert timetable object
+        after_data.asn_response === util.AST_RESPONSE_REJECT && after_data.status !== util.REQ_STATUS_ASSIGNED){        
+        console.log("Assistant rejected response. Logging rejection and rerouting request.");
+        let reqSlotRef = after_data.slotRef;
+        let a_id = after_data.asn_id;
+        let r_rejections = after_data.rejections; 
+        /**
+         * Current:OPTION 1:                                  OPTION 2:
+         * - log rejection in assistant_rejections          - revert timetable object
+         * - revert timetable object                        - create new request with added assistant exception
          * - revert request object fields
          * - reassign request
          */
-        let reqSlotRef = after_data.slotRef;
-        let a_id = after_data.asn_id;
-        let r_exceptions = after_data.exceptions; 
+        let rPayload = {
+            rejections: fieldValue.arrayUnion(requestPath._id)
+        };
+
+        try{
+            let rejectionPromise = await db.collection(util.COLN_ASSISTANT_ANALYTICS).doc(requestPath.yearId).collection(requestPath.monthId).doc(a_id).set(rPayload,{merge: true});
+            console.log("Rejection Promise: ", rejectionPromise);
+        }catch(error){
+            console.error("Error adding new document to assistant_rejections ", error);
+        }        
+
         let delPayload = {
             asn_id: fieldValue.delete(),
-            asn_response: fieldValue.delete(),
+            asn_response: util.AST_RESPONSE_NIL,
             slotRef: fieldValue.delete(),
             status: util.REQ_STATUS_UNASSIGNED,
-            exceptions: fieldValue.arrayUnion(a_id)
+            rejections: fieldValue.arrayUnion(a_id)
         }  
+
+        // let createPayload = {
+        //     address: after_data.address,
+        //     asn_response: util.AST_RESPONSE_NIL,
+        //     date: after_data.date,            
+        //     req_time: after_data.req_time,
+        //     service: after_data.service,
+        //     society_id: after_data.society_id,
+        //     status: util.REQ_STATUS_UNASSIGNED,
+        //     user_id: after_data.user_id,
+        //     timestamp: Date.now()
+        // }
 
         if(reqSlotRef !== undefined) {
             return schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, after_data.date, reqSlotRef, a_id).then(async flag => {
                 if(flag === 1) {
                     try{
                         //revert request fields
+                        //THIS will trigger this method again!
                         let reqDelPromise = await db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).set(delPayload,{merge: true});
+                        console.log("Reverted request to accept new assignee: ", requestPath._id, reqDelPromise);
                     }catch(error) {
                         console.error("Error reverting request fields: ", delPayload, error);
                         return 0;
                     }
-                    //request Assistant Service again but add the current rejected assistant in the exceptions list
-                    //TODO add more exceptions
-                    if(r_exceptions === undefined || r_exceptions.length === 0) {
-                        r_exceptions = [a_id];
+                    //request Assistant Service again but add the current rejected assistant in the exceptions list                    
+                    if(r_rejections === undefined || r_rejections.length === 0) {
+                        r_rejections = [a_id];
                     }else{
-                        r_exceptions.push(a_id);
-                    }
-                    return requestAssistantService(requestPath, after_data, r_exceptions, null);
+                        r_rejections.push(a_id);
+                    }                    
+                    return requestAssistantService(requestPath, after_data, r_rejections, null);
                 }else{
                     console.error("Received error flag from unbookAssistantSlot.");
                     return 0;
@@ -144,9 +160,8 @@ exports.onUpdateHandler = async (change, context) => {
             }).catch(error => {
                 console.error("Error unbooking slot: " + error);
                 return 0;
-            })
+            });
         }
-
         //TODO
         return 1;
     }
@@ -154,14 +169,12 @@ exports.onUpdateHandler = async (change, context) => {
     return 1;
 }
 
-
-//VARIABLES NEEED ALTERING!!
 /**
- * REQUESTASSISTANTSERVICE  //TODO
- * @param {*} requestPath 
- * @param {*} requestObj
- * @param {*} exceptions 
- * @param {*} forceAssistant 
+ * REQUESTASSISTANTSERVICE
+ * @param {yearId, monthId, _id} requestPath 
+ * @param {any} requestObj - complete request object
+ * @param {array} exceptions - rejected assistant list
+ * @param {string} forceAssistant - single assistant
  */
 var requestAssistantService = function(requestPath, requestObj, exceptions, forceAssistant) {
     let st_time = parseInt(requestObj.req_time);
@@ -175,7 +188,7 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
                 return 0;
             }
             console.log("Assistant details:: Id:",assistant._id," Booking assitant schedule: ", assistant.freeSlotLib);
-            const slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
+            let slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
             return schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, assistant._id).then(flag => {
                 if(flag === 1) {
                     return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
