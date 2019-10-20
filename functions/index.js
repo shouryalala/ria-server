@@ -97,6 +97,53 @@ exports.createJsObject = functions.https.onRequest((req, res) => {
     });
 });
 
+exports.pushDataMessage = functions.https.onRequest((req, res) => {
+    const instanceId = req.query.token;
+    const payload = {
+        data: {
+            aid: 'Sadma',
+            lname:'vati',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+    };
+
+    util.sendDataPayload(instanceId, payload);
+    return res.status(200).send("Success");
+});
+
+exports.pushNotification = functions.https.onRequest((req, res) => {
+    const instanceId = req.query.token;
+    const payload = {
+        notification: {
+            title: 'Sadma',
+            body:'vati',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+    };
+
+    util.sendDataPayload(instanceId, payload);
+    return res.status(200).send("Success");
+});
+
+exports.pushDataNotification = functions.https.onRequest((req, res) => {
+    const instanceId = req.query.token;
+    const payload = {
+        notification: {
+            title: 'Sadma',
+            body:'vati',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        },
+        data: {
+            aid: 'Kehti',
+            lname:'rahi',
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+    };
+
+    util.sendDataPayload(instanceId, payload);
+    return res.status(200).send("Success");
+});
+
 
 //BOILERPLATE FUNCTION
 exports.sendDataPacket = functions.https.onRequest((req, res) => {
