@@ -52,7 +52,9 @@ exports.onUpdateHandler = async (change, context) => {
     if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
         after_data.asn_response === util.AST_RESPONSE_ACCEPT && after_data.status === util.REQ_STATUS_ASSIGNED) {
         console.log("Assistant accepted and assigned request. Creating visit obj");
-        //TODO const end_time = getServiceEndTime        
+        //TODO const end_time = getServiceEndTime
+        let vis_st = util.getSlotMinTime();
+        let vis_en = util.getSlotMaxTime();
         var visitObj = {
             user_id: after_data.user_id,
             ass_id: after_data.asn_id,
@@ -60,10 +62,13 @@ exports.onUpdateHandler = async (change, context) => {
             service: after_data.service,
             address: after_data.address,
             society_id: after_data.society_id,
-            req_st_time: after_data.req_time,                
+            req_st_time: after_data.req_time,
+            vis_st_time: vis_st.encode(),
+            vis_en_time: vis_en.encode(),
             status: util.VISIT_STATUS_UPCOMING
         }
-        return db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).add(visitObj).then(() => {
+        let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
+        return visitObjRef.set(visitObj).then(() => {
             console.log("Created initial Visit object for requestID: " + requestPath._id);
             //Now fetch assistant details and send them to user along with request confirmation
             return db.collection(util.COLN_USERS).doc(after_data.user_id).get().then(docSnapshot => {
@@ -71,9 +76,11 @@ exports.onUpdateHandler = async (change, context) => {
                 let clientToken = user.mClientToken;
                 let payload = {
                     data: {
-                        ID: after_data.asn_id,                                                
+                        AID: after_data.asn_id,
+                        VID: visitObjRef,
                         Date: String(after_data.date),
-                        Start_Time: String(after_data.req_time),        //TODO add end time?
+                        Start_Time: String(vis_st.encode()),
+                        End_Time: String(vis_en.encode()),
                         Command: util.COMMAND_REQUEST_CONFIRMED
                     }
                 };
@@ -107,12 +114,21 @@ exports.onUpdateHandler = async (change, context) => {
             rejections: fieldValue.arrayUnion(requestPath._id)
         };
 
+        // try{
+        //     let rejectionPromise = await db.collection(util.COLN_ASSISTANT_ANALYTICS).doc(requestPath.yearId).collection(requestPath.monthId).doc(a_id).set(rPayload,{merge: true});
+        //     console.log("Rejection Promise: ", rejectionPromise);
+        // }catch(error){
+        //     console.error("Error adding new document to assistant_rejections ", error);
+        // }        
+
         try{
-            let rejectionPromise = await db.collection(util.COLN_ASSISTANT_ANALYTICS).doc(requestPath.yearId).collection(requestPath.monthId).doc(a_id).set(rPayload,{merge: true});
+            let docKey = requestPath.monthId + requestPath.yearId;  //ex: OCT2019
+            let rejectionPromise = await db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).set(rPayload,{merge: true});
             console.log("Rejection Promise: ", rejectionPromise);
         }catch(error){
             console.error("Error adding new document to assistant_rejections ", error);
         }        
+
 
         let delPayload = {
             asn_id: fieldValue.delete(),
