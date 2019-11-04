@@ -10,8 +10,16 @@ const COL_REQUEST = "requests";
 const COLN_VISITS = "visits";
 const COLN_TIMETABLE = "timetable";
 const COLN_ASSISTANT_ANALYTICS = "ast_analytics";
-//Sub Collection
+//Assistant Sub Collection
 const SUBCOLN_ASSISTANT_ANALYTICS = "analytics";
+const SUBCOLN_ASSITANT_FCM = "fcm";
+const SUBCOLN_ASSITANT_FEEDBK = "feedback";
+const DOC_ASSISTANT_FCM_TOKEN = "client_token";
+//User Subcollections and static Docs
+const SUBCOLN_USER_FCM = "fcm";
+const SUBCOLN_USER_ACTIVITY = "activity";
+const DOC_USER_FCM_TOKEN = "client_token";
+const DOC_ACTIVITY_STATUS = "status";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -120,10 +128,11 @@ var getSlotMinTime = function(slotRef){
                 }
             }
         }
+        //minMin is actually the slot
+        minMin *= 10;
+        return new DecodedTime(minHr, minMin);
     }
-    //maxMin is actually the slot
-    minMin *= 10;
-    return new DecodedTime(minHr, minMin);
+    return null;    
 }
 
 
@@ -145,10 +154,11 @@ var getSlotMaxTime = function(slotRef){
                 }
             }
         }
+        //maxMin is actually the slot
+        maxMin *= 10;
+        return new DecodedTime(maxHr, maxMin);
     }
-    //maxMin is actually the slot
-    maxMin *= 10;
-    return new DecodedTime(maxHr, maxMin);
+    return null;    
 }
 
 
@@ -205,23 +215,43 @@ var sendDataPayload = function(clientToken, payload) {
             });
 }
 
-var sendUserPayload = function(clientToken, payload, command) {
-    console.log("::sendDataPayload::INVOKED");
-    console.log(payload);
-    console.log("Sending Payload: " + payload + "\nto clientToken: " + clientToken);
-
-    //if(payload.notification)
-    
-    payload.data['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
-    return messaging.sendToDevice(clientToken, payload)
-            .then(response => {
-                console.log("Payload sent succesfully!");                
-                return 1;
-            })
-            .catch(error => {
-                console.error("Payload failed to be sent:" + error);
-                return 0;
-            });
+/**
+ * SENDUSERPAYLOAD 
+ * @param {String} userID 
+ * @param {Obj} payload 
+ * @param {String} command 
+ * returns boolean to indicate success
+ */
+var sendUserPayload = async function(userID, payload, command) {
+    console.log("::sendUserPayload::INVOKED");
+    console.log("Parameters:: UserID: ", userID, " ,Command: ", command, " ,Payload: ", payload);
+    if(userID === null || payload === null || command === null)return false;    
+    try{
+        let userToken = await db.collection(COLN_USERS).doc(userID).collection(SUBCOLN_USER_FCM).doc(DOC_ASSISTANT_FCM_TOKEN).get();
+        if(userToken !== null && userToken.data() !== null) {
+            //token now available:: tokenData: {token:.. , timestamp: ..}
+            let tokenData = userToken.data();
+            //add click action and command to data bracket and notification bracket
+            if(payload.hasOwnProperty('notification')){
+                payload.notification['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
+            }
+            if(payload.hasOwnProperty('data')){
+                payload.data['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
+                payload.data['command'] = command;
+            }        
+            try{                
+                await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully!");
+                return true;
+            }catch(error) {
+                console.error("Payload failed to be sent: ", error);
+                return false;
+            }    
+        }
+    }catch(error) {
+        console.error("Error fetching client_token: ", error);
+        return false;
+    }
 }
 
 /**
@@ -322,10 +352,11 @@ var getTTPathName = function(yearId, monthId, date, hour) {
 }
 
 module.exports = {
-    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,AST_TOKEN,AST_TOKEN_TIMESTAMP,
-    REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,
-    SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,VISIT_STATUS_CANCELLED,
-    VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,sortSlotsByHour,
-    DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,
-    verifyTime,getTTFieldName,getTTPathName
+    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,
+    SUBCOLN_ASSITANT_FCM,SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
+    AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
+    COMMAND_REQUEST_CONFIRMED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,
+    VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,
+    sortSlotsByHour,DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,sendUserPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,
+    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName
 }

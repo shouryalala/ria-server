@@ -20,7 +20,7 @@ exports.onCreateHandler =  (snap, context) => {
         monthId: context.params.monthSubcollectionId,
         yearId: context.params.yearDocId
     }
-    console.log("REQUEST: {YearId: " + requestPath.yearId + ", MonthId: " + requestPath.monthId + ", Request ID: " + requestPath._id + "}");   
+    console.log("REQUEST: {YearId: ",requestPath.yearId,", MonthId: ",requestPath.monthId,", Request ID: ",requestPath._id,"}");
     
     console.log(requestObj);
     console.log(requestObj.exceptions);
@@ -32,6 +32,7 @@ exports.onCreateHandler =  (snap, context) => {
  * ASSISTANTRESPONSEHANDLER
  * - Triggered when assistant responds to request
  * - creates a visit object if request approved
+ * - alerts user of confirmation adn sends details
  * - restarts search for an assistant if refused by assistant
  */
 exports.onUpdateHandler = async (change, context) => {
@@ -43,19 +44,18 @@ exports.onUpdateHandler = async (change, context) => {
         _id: context.params.requestId,
         monthId: context.params.monthSubcollectionId,
         yearId: context.params.yearDocId
-    }
-    // const yearDocId = context.params.yearDoc;
-    // const subCollectionId = context.params.monthSubcollection;
-    // const requestDocId = context.params.requestId;
+    }    
 
     //explicity check each condition before creating visit obj
     if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
         after_data.asn_response === util.AST_RESPONSE_ACCEPT && after_data.status === util.REQ_STATUS_ASSIGNED) {
-        console.log("Assistant accepted and assigned request. Creating visit obj");
-        //TODO const end_time = getServiceEndTime
+        console.log("Assistant accepted and assigned request. Creating visit obj");        
+        //assumption: the visit and request objects are in the SAME YEAR AND MONTH. thus only saving requestID
+        let requestId = context.params.requestId;   
         let vis_st = util.getSlotMinTime();
         let vis_en = util.getSlotMaxTime();
         var visitObj = {
+            req_id: requestId,
             user_id: after_data.user_id,
             ass_id: after_data.asn_id,
             date: after_data.date,
@@ -68,33 +68,34 @@ exports.onUpdateHandler = async (change, context) => {
             status: util.VISIT_STATUS_UPCOMING
         }
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
-        return visitObjRef.set(visitObj).then(() => {
-            console.log("Created initial Visit object for requestID: " + requestPath._id);
-            //Now fetch assistant details and send them to user along with request confirmation
-            return db.collection(util.COLN_USERS).doc(after_data.user_id).get().then(docSnapshot => {
-                let user = docSnapshot.data();
-                let clientToken = user.mClientToken;
-                let payload = {
-                    data: {
-                        AID: after_data.asn_id,
-                        VID: visitObjRef,
-                        Date: String(after_data.date),
-                        Start_Time: String(vis_st.encode()),
-                        End_Time: String(vis_en.encode()),
-                        Command: util.COMMAND_REQUEST_CONFIRMED
-                    }
-                };
-                return util.sendDataPayload(clientToken, payload);
-            })
-            .catch(error => {
-                console.error("Error fetching user details: " + error);
-                return 0;
-            });
-        })
-        .catch((error) => {
-            console.error("Error creating visit obj: " + error);
+        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);        
+        try{
+            //set visit document
+            let visPromise = await visitObjRef.set(visitObj);
+            console.log("Created initial Visit object: ", visitObjRef, " for requestID: " + requestPath._id);
+            //set user activity            
+            var userStatusObj = {
+                visit_id: visitObjRef,
+                visit_status: util.VISIT_STATUS_UPCOMING
+            }
+            let activityPromise = await userActivityRef.set(userStatusObj);
+            //create payload to be sent to the user
+            let payload = {
+                data: {
+                    AID: after_data.asn_id,
+                    VID: visitObjRef,
+                    Date: String(after_data.date),
+                    Start_Time: String(vis_st.encode()),
+                    End_Time: String(vis_en.encode()),                        
+                }
+            };
+            let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_REQUEST_CONFIRMED);
+            console.log("onUpdateHandler Promise Results:: visitSetter: ", visPromise, " ,userActivitySetter: ",activityPromise, " sendPayloadFlag: ", sendPayloadFlag);
+            return 1;
+        }catch(error){
+            console.error("Error in adding visit obj: ", error);
             return 0;
-        });
+        }       
     }
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
