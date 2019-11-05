@@ -52,8 +52,8 @@ exports.onUpdateHandler = async (change, context) => {
         console.log("Assistant accepted and assigned request. Creating visit obj");        
         //assumption: the visit and request objects are in the SAME YEAR AND MONTH. thus only saving requestID
         let requestId = context.params.requestId;   
-        let vis_st = util.getSlotMinTime();
-        let vis_en = util.getSlotMaxTime();
+        let vis_st = util.getSlotMinTime(after_data.slotRef);
+        let vis_en = util.getSlotMaxTime(after_data.slotRef);
         var visitObj = {
             req_id: requestId,
             user_id: after_data.user_id,
@@ -65,17 +65,19 @@ exports.onUpdateHandler = async (change, context) => {
             req_st_time: after_data.req_time,
             vis_st_time: vis_st.encode(),
             vis_en_time: vis_en.encode(),
-            status: util.VISIT_STATUS_UPCOMING
+            status: util.VISIT_STATUS_UPCOMING,
+            timestamp: fieldValue.serverTimestamp()
         }
+        console.log(visitObj);
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
         let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);        
         try{
             //set visit document
             let visPromise = await visitObjRef.set(visitObj);
-            console.log("Created initial Visit object: ", visitObjRef, " for requestID: " + requestPath._id);
+            console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
             //set user activity            
             var userStatusObj = {
-                visit_id: visitObjRef,
+                visit_id: visitObjRef.path,
                 visit_status: util.VISIT_STATUS_UPCOMING
             }
             let activityPromise = await userActivityRef.set(userStatusObj);
@@ -83,7 +85,7 @@ exports.onUpdateHandler = async (change, context) => {
             let payload = {
                 data: {
                     AID: after_data.asn_id,
-                    VID: visitObjRef,
+                    VID: visitObjRef.path,
                     Date: String(after_data.date),
                     Start_Time: String(vis_st.encode()),
                     End_Time: String(vis_en.encode()),                        

@@ -166,7 +166,7 @@ let getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
             for(ex in exceptions) {
                 console.log(exceptions[ex]);            
             }
-            assistants = assistants.filter(function(value, index, arr) {
+            assistants = assistants.filter((value, index, arr) => {
                 return (!exceptions.includes(value));
             });
             console.log("After removing exceptions: ", assistants);

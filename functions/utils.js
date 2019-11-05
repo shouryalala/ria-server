@@ -222,32 +222,38 @@ var sendDataPayload = function(clientToken, payload) {
  * @param {String} command 
  * returns boolean to indicate success
  */
-var sendUserPayload = async function(userID, payload, command) {
+var sendUserPayload = async function(userID, payload, command) {    
     console.log("::sendUserPayload::INVOKED");
     console.log("Parameters:: UserID: ", userID, " ,Command: ", command, " ,Payload: ", payload);
-    if(userID === null || payload === null || command === null)return false;    
+    if(userID === undefined || payload === undefined || command === undefined)return false; 
     try{
+        /* eslint-disable require-atomic-updates */    
         let userToken = await db.collection(COLN_USERS).doc(userID).collection(SUBCOLN_USER_FCM).doc(DOC_ASSISTANT_FCM_TOKEN).get();
-        if(userToken !== null && userToken.data() !== null) {
+        if(userToken !== null && userToken !== undefined && userToken.data() !== null) {
             //token now available:: tokenData: {token:.. , timestamp: ..}
             let tokenData = userToken.data();
+            console.log("Token Data: ", tokenData);
             //add click action and command to data bracket and notification bracket
-            if(payload.hasOwnProperty('notification')){
+            console.log("Payload Before: ", payload);
+            if(payload['notification'] !== undefined){
                 payload.notification['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
             }
-            if(payload.hasOwnProperty('data')){
+            if(payload['data'] !== undefined){
                 payload.data['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
-                payload.data['command'] = command;
-            }        
+                payload.data['Command'] = command;
+            }
+            console.log("Payload After: ", payload);
             try{                
                 await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully!");
+                console.log("Payload sent successully:: Token:", token, " Payload:", payload);
                 return true;
             }catch(error) {
                 console.error("Payload failed to be sent: ", error);
                 return false;
-            }    
+            }
         }
+        return false;
+        /* eslint-disable require-atomic-updates */    
     }catch(error) {
         console.error("Error fetching client_token: ", error);
         return false;
@@ -352,8 +358,8 @@ var getTTPathName = function(yearId, monthId, date, hour) {
 }
 
 module.exports = {
-    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,
-    SUBCOLN_ASSITANT_FCM,SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
+    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSITANT_FCM,
+    SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,
     VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,
