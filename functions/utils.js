@@ -240,12 +240,12 @@ var sendUserPayload = async function(userID, payload, command) {
             }
             if(payload['data'] !== undefined){
                 payload.data['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
-                payload.data['Command'] = command;
+                payload.data['command'] = command;
             }
             console.log("Payload After: ", payload);
             try{                
                 await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully:: Token:", token, " Payload:", payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
                 return true;
             }catch(error) {
                 console.error("Payload failed to be sent: ", error);

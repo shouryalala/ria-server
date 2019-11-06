@@ -83,12 +83,21 @@ exports.onUpdateHandler = async (change, context) => {
             let activityPromise = await userActivityRef.set(userStatusObj);
             //create payload to be sent to the user
             let payload = {
+                notification: {
+                    title: 'Assitant on their way',
+                    body: after_data.asn_id + 'will reach soon!',                    
+                },
+                //Field keys should replicate client visit object keys
                 data: {
-                    AID: after_data.asn_id,
-                    VID: visitObjRef.path,
-                    Date: String(after_data.date),
-                    Start_Time: String(vis_st.encode()),
-                    End_Time: String(vis_en.encode()),                        
+                    visit_path: visitObjRef.path,
+                    ass_id: after_data.asn_id,
+                    date: String(after_data.date),
+                    req_st_time: String(after_data.req_st_time),                    
+                    vis_st_Time: String(vis_st.encode()),
+                    vis_en_time: String(vis_en.encode()),
+                    service: after_data.service,
+                    status: String(util.VISIT_STATUS_UPCOMING),
+                    user_id: after_data.user_id,    //shouldnt be required
                 }
             };
             let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_REQUEST_CONFIRMED);
