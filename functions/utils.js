@@ -238,8 +238,7 @@ var sendUserPayload = async function(userID, payload, command) {
             if(payload['notification'] !== undefined){
                 payload.notification['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
             }
-            if(payload['data'] !== undefined){
-                payload.data['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
+            if(payload['data'] !== undefined){        
                 payload.data['command'] = command;
             }
             console.log("Payload After: ", payload);
