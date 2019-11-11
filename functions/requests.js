@@ -57,6 +57,7 @@ exports.onUpdateHandler = async (change, context) => {
         var visitObj = {
             req_id: requestId,
             user_id: after_data.user_id,
+            user_mobile: after_data.user_mobile,
             ass_id: after_data.asn_id,
             date: after_data.date,
             service: after_data.service,
