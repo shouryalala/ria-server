@@ -232,7 +232,7 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
                         }
                     };
                     //return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
-                    return util.sendAssistantPayload(assistant._id, payload, COMMAND_WORK_REQUEST).then(response => {
+                    return util.sendAssistantPayload(assistant._id, payload, util.COMMAND_WORK_REQUEST).then(response => {
                         if(response === true) {
                             console.log("Updating the snapshot's assignee.");
                             let pathRef = db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);

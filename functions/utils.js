@@ -229,7 +229,7 @@ var sendUserPayload = async function(userID, payload, command) {
     try{
         /* eslint-disable require-atomic-updates */    
         let userToken = await db.collection(COLN_USERS).doc(userID).collection(SUBCOLN_USER_FCM).doc(DOC_USER_FCM_TOKEN).get();
-        if(userToken !== null && userToken !== undefined && userToken.data() !== null) {
+        if(userToken !== undefined && userToken !== undefined && userToken.data() !== null) {
             //token now available:: tokenData: {token:.. , timestamp: ..}
             let tokenData = userToken.data();
             console.log("Token Data: ", tokenData);
@@ -273,8 +273,10 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
     if(assistantID === undefined || payload === undefined || command === undefined)return false; 
     try{
         /* eslint-disable require-atomic-updates */    
-        let assistantToken = await db.collection(COLN_ASSISTANTS).doc(assistantID).collection(SUBCOLN_ASSISTANT_FCM).doc(DOC_ASSISTANT_FCM_TOKEN).get();
-        if(assistantToken !== null && assistantToken !== undefined && assistantToken.data() !== null) {
+        let assistantTokenRef = db.collection(COLN_ASSISTANTS).doc(assistantID.trim()).collection(SUBCOLN_ASSISTANT_FCM).doc(DOC_ASSISTANT_FCM_TOKEN);
+        console.log("AssistantTokenRef: ", assistantTokenRef.path);
+        let assistantToken = await assistantTokenRef.get();
+        if(assistantToken !== undefined && assistantToken !== undefined && assistantToken.data() !== undefined) {
             //token now available:: tokenData: {token:.. , timestamp: ..}
             let tokenData = assistantToken.data();
             console.log("Token Data: ", tokenData);
