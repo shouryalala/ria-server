@@ -220,8 +220,20 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
             let slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
             return schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, assistant._id).then(flag => {
                 if(flag === 1) {
-                    return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
-                        if(response === 1) {
+                    const payload = {
+                        data: {
+                            RID: requestPath._id,
+                            Service: requestObj.service,                            
+                            Date: String(requestObj.date),                            
+                            Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
+                            Address: requestObj.address,
+                            SocID: requestObj.society_id,
+                            //Command: COMMAND_WORK_REQUEST
+                        }
+                    };
+                    //return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
+                    return util.sendAssistantPayload(assistant._id, payload, COMMAND_WORK_REQUEST).then(response => {
+                        if(response === true) {
                             console.log("Updating the snapshot's assignee.");
                             let pathRef = db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
                             //snap.ref.set({
