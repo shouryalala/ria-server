@@ -12,7 +12,7 @@ const COLN_TIMETABLE = "timetable";
 const COLN_ASSISTANT_ANALYTICS = "ast_analytics";
 //Assistant Sub Collection
 const SUBCOLN_ASSISTANT_ANALYTICS = "analytics";
-const SUBCOLN_ASSITANT_FCM = "fcm";
+const SUBCOLN_ASSISTANT_FCM = "fcm";
 const SUBCOLN_ASSITANT_FEEDBK = "feedback";
 const DOC_ASSISTANT_FCM_TOKEN = "client_token";
 //User Subcollections and static Docs
@@ -168,36 +168,36 @@ var getSlotMaxTime = function(slotRef){
  * @param {service, address, time} request (contains entire request Obj)
  * @param {_id: string, clientToken: string, freeSlotLib: DecodedTime[]} assistant 
  */
-var sendAssitantRequest = function(requestPath, request, assistant) {
-    console.log("::sendAssitantRequest::INVOKED");        
-    console.log("Encoded time: " + assistant.freeSlotLib[0].encode());
-    const payload = {
-        data: {
-            RID: requestPath._id,
-            Service: request.service,
-            Address: request.address,
-            Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
-            Command: COMMAND_WORK_REQUEST
-        }
-    };
+// var sendAssitantRequest = function(requestPath, request, assistant) {
+//     console.log("::sendAssitantRequest::INVOKED");        
+//     console.log("Encoded time: " + assistant.freeSlotLib[0].encode());
+//     const payload = {
+//         data: {
+//             RID: requestPath._id,
+//             Service: request.service,
+//             Address: request.address,
+//             Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
+//             Command: COMMAND_WORK_REQUEST
+//         }
+//     };
 
-    console.log("Attempting to send the request to assistant. Request ID: " + requestPath._id + "to Assistant: " + assistant._id);
-    //send payload to assistant        
-    return messaging.sendToDevice(assistant.clientToken, payload)
-            .then(response => {
-                console.log("Request sent succesfully! Request ID: " + requestPath._id);
-                setTimeout(() => {
-                    console.log("Invoking routine Request status check for requestId: " + requestId);
-                    checkRequestStatus(requestPath, assistant._id);
-                }, REQUEST_STATUS_CHECK_TIMEOUT);
-                return 1;
-            })
-            .catch(error => {
-                console.error("Request couldnt be sent: Request ID: " + requestPath._id + "\nError: " + error);
-                //TODO
-                return 0;
-            });
-}
+//     console.log("Attempting to send the request to assistant. Request ID: " + requestPath._id + "to Assistant: " + assistant._id);
+//     //send payload to assistant        
+//     return messaging.sendToDevice(assistant.clientToken, payload)
+//             .then(response => {
+//                 console.log("Request sent succesfully! Request ID: " + requestPath._id);
+//                 setTimeout(() => {
+//                     console.log("Invoking routine Request status check for requestId: " + requestId);
+//                     checkRequestStatus(requestPath, assistant._id);
+//                 }, REQUEST_STATUS_CHECK_TIMEOUT);
+//                 return 1;
+//             })
+//             .catch(error => {
+//                 console.error("Request couldnt be sent: Request ID: " + requestPath._id + "\nError: " + error);
+//                 //TODO
+//                 return 0;
+//             });
+// }
 
 var sendDataPayload = function(clientToken, payload) {
     console.log("::sendDataPayload::INVOKED");
@@ -228,8 +228,8 @@ var sendUserPayload = async function(userID, payload, command) {
     if(userID === undefined || payload === undefined || command === undefined)return false; 
     try{
         /* eslint-disable require-atomic-updates */    
-        let userToken = await db.collection(COLN_USERS).doc(userID).collection(SUBCOLN_USER_FCM).doc(DOC_ASSISTANT_FCM_TOKEN).get();
-        if(userToken !== null && userToken !== undefined && userToken.data() !== null) {
+        let userToken = await db.collection(COLN_USERS).doc(userID).collection(SUBCOLN_USER_FCM).doc(DOC_USER_FCM_TOKEN).get();
+        if(userToken !== undefined && userToken !== undefined && userToken.data() !== null) {
             //token now available:: tokenData: {token:.. , timestamp: ..}
             let tokenData = userToken.data();
             console.log("Token Data: ", tokenData);
@@ -240,6 +240,53 @@ var sendUserPayload = async function(userID, payload, command) {
             }
             if(payload['data'] !== undefined){        
                 payload.data['command'] = command;
+            }
+            console.log("Payload After: ", payload);
+            try{                
+                await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
+                return true;
+            }catch(error) {
+                console.error("Payload failed to be sent: ", error);
+                return false;
+            }
+        }
+        return false;
+        /* eslint-disable require-atomic-updates */    
+    }catch(error) {
+        console.error("Error fetching client_token: ", error);
+        return false;
+    }
+}
+
+
+/**
+ * SENDASSISTANTPAYLOAD 
+ * @param {String} userID 
+ * @param {Obj} payload 
+ * @param {String} command 
+ * returns boolean to indicate success
+ */
+var sendAssistantPayload = async function(assistantID, payload, command) {    
+    console.log("::sendUserPayload::INVOKED");
+    console.log("Parameters:: AssistantID: ", assistantID, " ,Command: ", command, " ,Payload: ", payload);
+    if(assistantID === undefined || payload === undefined || command === undefined)return false; 
+    try{
+        /* eslint-disable require-atomic-updates */    
+        let assistantTokenRef = db.collection(COLN_ASSISTANTS).doc(assistantID.trim()).collection(SUBCOLN_ASSISTANT_FCM).doc(DOC_ASSISTANT_FCM_TOKEN);
+        console.log("AssistantTokenRef: ", assistantTokenRef.path);
+        let assistantToken = await assistantTokenRef.get();
+        if(assistantToken !== undefined && assistantToken !== undefined && assistantToken.data() !== undefined) {
+            //token now available:: tokenData: {token:.. , timestamp: ..}
+            let tokenData = assistantToken.data();
+            console.log("Token Data: ", tokenData);
+            //add click action and command to data bracket and notification bracket
+            console.log("Payload Before: ", payload);
+            // if(payload['notification'] !== undefined){
+            //     payload.notification['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
+            // }
+            if(payload['data'] !== undefined){        
+                payload.data['Command'] = command;  //TODO change assistant payload case to lower            
             }
             console.log("Payload After: ", payload);
             try{                
@@ -357,11 +404,12 @@ var getTTPathName = function(yearId, monthId, date, hour) {
 }
 
 module.exports = {
-    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSITANT_FCM,
+    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
     SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,
     VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,
-    sortSlotsByHour,DecodedTime,getServiceDuration,sendAssitantRequest,sendDataPayload,sendUserPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,
+    sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,
     getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName
+    //sendAssitantRequest
 }
