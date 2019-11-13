@@ -71,17 +71,23 @@ exports.onUpdateHandler = async (change, context) => {
         }
         console.log(visitObj);
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
-        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);        
+        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);
+        
+        let batch = db.batch();
+        //set visit document
+        //let visPromise = await visitObjRef.set(visitObj);
+        batch.set(visitObjRef, visitObj);
+        console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
+        //set user activity            
+        var userStatusObj = {
+            visit_id: visitObjRef.path,
+            visit_status: util.VISIT_STATUS_UPCOMING
+        }
+        //let activityPromise = await userActivityRef.set(userStatusObj);
+        batch.set(userActivityRef, userStatusObj);
         try{
-            //set visit document
-            let visPromise = await visitObjRef.set(visitObj);
-            console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
-            //set user activity            
-            var userStatusObj = {
-                visit_id: visitObjRef.path,
-                visit_status: util.VISIT_STATUS_UPCOMING
-            }
-            let activityPromise = await userActivityRef.set(userStatusObj);
+            console.log("Setting both documents in a batch commit");
+            await batch.commit();
             //create payload to be sent to the user
             let payload = {
                 notification: {
@@ -102,12 +108,13 @@ exports.onUpdateHandler = async (change, context) => {
                 }
             };
             let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_REQUEST_CONFIRMED);
-            console.log("onUpdateHandler Promise Results:: visitSetter: ", visPromise, " ,userActivitySetter: ",activityPromise, " sendPayloadFlag: ", sendPayloadFlag);
+            console.log("Batch commit succesful! SendPayloadFlag: ", sendPayloadFlag);
             return 1;
-        }catch(error){
-            console.error("Error in adding visit obj: ", error);
+        }catch(e) {
+            console.error("Batch write failed: ", e);
             return 0;
-        }       
+        }            
+    
     }
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
