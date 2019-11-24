@@ -56,13 +56,13 @@ exports.onUpdateHandler = async (change, context) => {
         let vis_en = util.getSlotMaxTime(after_data.slotRef);
         var visitObj = {
             req_id: requestId,
-            user_id: after_data.user_id,
-            user_mobile: after_data.user_mobile,
-            ass_id: after_data.asn_id,
+            user_id: after_data.user_id.trim(),
+            user_mobile: after_data.user_mobile.trim(),
+            ass_id: after_data.asn_id.trim(),
             date: after_data.date,
             service: after_data.service,
             address: after_data.address,
-            society_id: after_data.society_id,
+            society_id: after_data.society_id.trim(),
             req_st_time: after_data.req_time,
             vis_st_time: vis_st.encode(),
             vis_en_time: vis_en.encode(),
@@ -71,17 +71,23 @@ exports.onUpdateHandler = async (change, context) => {
         }
         console.log(visitObj);
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
-        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);        
+        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);
+        
+        let batch = db.batch();
+        //set visit document
+        //let visPromise = await visitObjRef.set(visitObj);
+        batch.set(visitObjRef, visitObj);
+        console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
+        //set user activity            
+        var userStatusObj = {
+            visit_id: visitObjRef.path,
+            visit_status: util.VISIT_STATUS_UPCOMING
+        }
+        //let activityPromise = await userActivityRef.set(userStatusObj);
+        batch.set(userActivityRef, userStatusObj);
         try{
-            //set visit document
-            let visPromise = await visitObjRef.set(visitObj);
-            console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
-            //set user activity            
-            var userStatusObj = {
-                visit_id: visitObjRef.path,
-                visit_status: util.VISIT_STATUS_UPCOMING
-            }
-            let activityPromise = await userActivityRef.set(userStatusObj);
+            console.log("Setting both documents in a batch commit");
+            await batch.commit();
             //create payload to be sent to the user
             let payload = {
                 notification: {
@@ -102,12 +108,13 @@ exports.onUpdateHandler = async (change, context) => {
                 }
             };
             let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_REQUEST_CONFIRMED);
-            console.log("onUpdateHandler Promise Results:: visitSetter: ", visPromise, " ,userActivitySetter: ",activityPromise, " sendPayloadFlag: ", sendPayloadFlag);
+            console.log("Batch commit succesful! SendPayloadFlag: ", sendPayloadFlag);
             return 1;
-        }catch(error){
-            console.error("Error in adding visit obj: ", error);
+        }catch(e) {
+            console.error("Batch write failed: ", e);
             return 0;
-        }       
+        }            
+    
     }
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
@@ -135,7 +142,7 @@ exports.onUpdateHandler = async (change, context) => {
         // }        
 
         try{
-            let docKey = requestPath.monthId + requestPath.yearId;  //ex: OCT2019
+            let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
             let rejectionPromise = await db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).set(rPayload,{merge: true});
             console.log("Rejection Promise: ", rejectionPromise);
         }catch(error){
@@ -211,7 +218,7 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
 
     return schedular.getAvailableAssistant(requestObj.address, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant)
         .then(assistant => {
-            if(assistant._id === undefined || assistant.freeSlotLib === undefined) {
+            if(assistant === null || assistant._id === undefined || assistant.freeSlotLib === undefined) {
                 console.log("No available maids at the moment.");
                 //TODO
                 return 0;
@@ -222,12 +229,12 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
                 if(flag === 1) {
                     const payload = {
                         data: {
-                            RID: requestPath._id,
-                            Service: requestObj.service,                            
-                            Date: String(requestObj.date),                            
-                            Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
-                            Address: requestObj.address,
-                            SocID: requestObj.society_id,
+                            rId: requestPath._id,
+                            service: requestObj.service,                            
+                            date: String(requestObj.date),                            
+                            time: String(assistant.freeSlotLib[0].encode()),      //cant send number
+                            address: requestObj.address,
+                            socId: requestObj.society_id,
                             //Command: COMMAND_WORK_REQUEST
                         }
                     };
