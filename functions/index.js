@@ -274,6 +274,31 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
     });
 });
 
+exports.createComplexObject = functions.https.onRequest((req, res) => {
+    console.log("::createComplexObject::INVOKED");
+    const yearDoc = "2019";
+    const monthSubCollection = "NOV"; 
+    const key = req.query.kez;
+    var packet = {};
+    var rObj = {
+        in_diff: 32,
+        out_diff: 42,
+        total: 36
+    };
+    packet[key] = rObj;   
+    
+    
+    return db.collection(util.COLN_ASSISTANTS).doc("Wesu70gc3HXtBZYAkapDr8dIJka2").collection("analytics").doc("2019-NOV-VDIFF").set(packet, {merge: true}).then(() => {
+        console.log("Complex object created!");
+        return res.status(200).send("Created automagically!");
+    })
+    .catch((error) => {
+        console.error("Error creating dummy request: " + error);
+        return res.status(500).send("Error: " + error);
+    });
+});
+
+
 exports.getTimetably = functions.https.onRequest((req, res) => {    
     return getAvailableAssistant('abc','JUN',28,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
         if(response === null) {
