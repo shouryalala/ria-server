@@ -56,6 +56,7 @@ const REQUEST_STATUS_CHECK_TIMEOUT = 90000  //90 seconds
 const dummy1 = 'bhenbhaibhenbhai';
 const dummy2 = 'acxacxsexsexsex';
 const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
+const yrCodes = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEV'];
 
 class DecodedTime {    
     constructor(hour, min) {
@@ -404,6 +405,20 @@ var getTTPathName = function(yearId, monthId, date, hour) {
     return yearId+monthId+String(date)+"_"+String(hour);
 }
 
+
+/**
+ * ISVALIDPATH 
+ * checks if request/visit in case is from this month and year
+ * @param {String} yearId 
+ * @param {String} monthId 
+ * @param {String} pId 
+ * returns boolean
+ */
+var isValidPath = function(yearId, monthId, pId) {
+    var date = new Date();
+    return (date.getFullYear().toString() === yearId.trim() && yrCodes[date.getMonth()] === monthId.trim());
+}
+
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
     SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
@@ -411,6 +426,6 @@ module.exports = {
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,
     VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,
     sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,
-    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName
+    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isValidPath
     //sendAssitantRequest
 }

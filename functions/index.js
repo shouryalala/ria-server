@@ -5,6 +5,7 @@ const twilioAccSid = 'ACa5c1c8a644b5865026a9efb1633d564a';
 const twilioAuthToken = 'eb2f66297a8319ecae91f53851c14778';
 const twilio = require('twilio')(twilioAccSid, twilioAuthToken);
 const requestModule = require('./requests');
+const visitModule = require('./visits');
 const util = require('./utils');
 
 /**
@@ -354,6 +355,8 @@ exports.assistantResponseHandler = functions.firestore
     .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onUpdate(requestModule.onUpdateHandler);
 
-
+exports.visitHandler = functions.firestore
+    .document('visits/{yearDocId}/{monthSubcollectionId}/{visitId}')
+    .onUpdate(visitModule.onUpdateHandler);
 
 
