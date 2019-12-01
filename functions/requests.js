@@ -213,10 +213,18 @@ exports.onUpdateHandler = async (change, context) => {
  * @param {string} forceAssistant - single assistant
  */
 var requestAssistantService = function(requestPath, requestObj, exceptions, forceAssistant) {
+    if(requestPath === undefined || requestObj === undefined){
+        console.error("Undefined request Path/ request object");
+        return 0;
+    }
+    if(!util.isValidPath(requestPath.yearId, requestPath.monthId, requestPath._id)) {
+        console.error("Request from an expired date.", requestPath);
+        return 0;
+    }
     let st_time = parseInt(requestObj.req_time);
     let en_time = st_time + util.getServiceDuration(requestObj.service, null);
 
-    return schedular.getAvailableAssistant(requestObj.address, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant)
+    return schedular.getAvailableAssistant(requestObj.society_id, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant)
         .then(assistant => {
             if(assistant === null || assistant._id === undefined || assistant.freeSlotLib === undefined) {
                 console.log("No available maids at the moment.");

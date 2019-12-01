@@ -2,7 +2,7 @@ const util = require('./utils');
 const {db, fieldValue} = require('./admin');
 
 /** 
- * @param {string} address 
+ * @param {string} society_id 
  * @param {string} monthId 
  * @param {number} date 
  * @param {number} st_time 
@@ -14,9 +14,9 @@ const {db, fieldValue} = require('./admin');
  * - fetch the timetable
  * - use a sliding window to obtain optimal free slot
  * 
- * return Obj = {_id: string, clientToken: string, FreeSlotLib: [DecodedTime]free slots array}
+ * return Obj = {_id: string, FreeSlotLib: [DecodedTime]free slots array}
  */
-exports.getAvailableAssistant = function(address, monthId, date, st_time, en_time, exceptions, forceAssistant) {
+exports.getAvailableAssistant = function(society_id, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED::Params{date: " + date + ", st_time: " 
     + st_time + ", en_time: " + en_time + ", exceptions: " + exceptions + ", forceAssistant: " + forceAssistant + "}");    
     //const buffer_secs = 1200;
@@ -50,7 +50,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
         st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
     }
     //var timetableNslots = getTimetable
-    return getTimetable(util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant).then(res => {
+    return getTimetable(society_id, util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant).then(res => {
         if(res === 0) {
             console.error("Received an error from getTimetable. Exiting method");
             return 0;
@@ -73,7 +73,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
                 if(tAssistantId !== null) {                    
                     console.log("Found free assistant: " + tAssistantId + " in window: " + k_right);
                     console.log("Slot: " + k_right + ", Decoded:: (" + res.slotLib[k_right].getHours() + "," +  res.slotLib[k_right].getMins() + ")");
-                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
+                    //console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
                     flag = true;
                     //put all slots in a block to return
                     let slotBlock = [];
@@ -82,7 +82,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
                     }
                     rObj = {
                         _id: tAssistantId,
-                        clientToken: res.assistantTokenLib[tAssistantId],
+                        //clientToken: res.assistantTokenLib[tAssistantId],
                         freeSlotLib: slotBlock
                     }
                     break;
@@ -95,7 +95,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
                 if(tAssistantId !== null) {                    
                     console.log("Found free assistant: " + tAssistantId + " in window: " + k_left);
                     console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
-                    console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
+                    //console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
                     flag = true;
                     //put all slots in a block to return
                     let slotBlock = [];
@@ -104,7 +104,7 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
                     }
                     rObj = {
                         _id: tAssistantId,
-                        clientToken: res.assistantTokenLib[tAssistantId],
+                        //clientToken: res.assistantTokenLib[tAssistantId],
                         freeSlotLib: slotBlock
                     }
                     break;
@@ -128,9 +128,9 @@ exports.getAvailableAssistant = function(address, monthId, date, st_time, en_tim
  * GETTIMETABLE
  * Generates a 2d map => asMap[SLOT][ASSISTANT] after fetching assistant scehdule from db.
  * 
- * return Obj = {assistantLib: assistants, slotLib: slots, timetable: asMap, assistantTokenLib: assistant_list}
+ * return Obj = {assistantLib: assistants, slotLib: slots, timetable: asMap}
  */
-let getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exceptions, forceAssistant) {
+let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, en_time_dec, exceptions, forceAssistant) {
     console.log("::getTimetable::INVOKED::Params: {date:",date," ,st_time:",st_time_dec.toString(),",en_time:",en_time_dec.toString(),
     ",exceptions:",exceptions,",forceAssistant:",forceAssistant,"}");
     
@@ -145,14 +145,17 @@ let getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
     console.log("Generated Timeline Details:  Min: (Doc ID: " + min_doc_id + ", Slot ID: " + min_slot_id 
         + ")\tMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
 
+    let assistants = await getCurrentlyAvailableAsts(societyId);
+    if(assistants === null || assistants.length === 0)return 0;
+
     return db.collection(util.COLN_TIMETABLE).doc(docId).get().then(docSnapshot => {
-        let assistant_list = docSnapshot.data();
-        let assistants = [];
-        console.log("Assistant List: ");
-        for(const key in assistant_list) {
-            console.log("ID: " + key + "  Token " + assistant_list[key]);
-            assistants.push(key);
-        }
+        // //let assistant_list = docSnapshot.data();
+        //    let assistants = [];
+        // console.log("Available Assistants: ");
+        // for(const key in assistant_list) {
+        //     console.log("ID: " + key + "  Token " + assistant_list[key]);
+        //     assistants.push(key);
+        // }
         if(forceAssistant !== null && forceAssistant !== undefined) {
             //typeof forceAssistant !== 'undefined' 
             console.log("Search details for only this assistant: " + forceAssistant);
@@ -243,8 +246,7 @@ let getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
             const sObj = {
                 assistantLib: assistants,
                 slotLib: slots,
-                timetable: asMap,
-                assistantTokenLib: assistant_list
+                timetable: asMap                
             }            
             return sObj;
         }).catch(error => {
@@ -255,6 +257,58 @@ let getTimetable = function(docId, monthId, date, st_time_dec, en_time_dec, exce
         console.error("Failed to fetch assitant details: " + error);
         return 0;
     });   
+}
+
+/**
+ * 
+ * @param {String} society_id 
+ * TODO
+ */
+let getCurrentlyAvailableAsts = async function(society_id) {    
+    let socAsts, onlineAsts;
+    let resAsts = [];
+    try{
+        //get assistants servicing that society
+        let saDoc = await db.collection(util.COLN_SOCIETIES).doc(society_id)
+                                .collection(util.SUBCOLN_SOC_ASTS).doc(util.DOC_SOC_AST_SERVICING).get();
+        let socAstDoc = saDoc.data();
+        socAsts = socAstDoc[util.ARRAY_AST];
+    }catch(error) {
+        console.error("Couldnt fetch society assistants", error);
+        return null;
+    }
+    if(socAsts !== null && socAsts.length > 0) {
+        try{
+            //get all online assistants
+            let onDoc = await db.collection(util.COLN_ASSISTANTS).doc(util.DOC_ONLINE_ASTS).get();
+            let onAstDoc = onDoc.data();
+            onlineAsts = onAstDoc[util.ARRAY_AST];
+        }catch(error) {
+            console.error("Couldnt fetch society assistants", error);
+            return null;
+        }
+    }else{
+        console.error("No servicing assistants found for society.");
+        return null;
+    }    
+    if(onlineAsts !== null && onlineAsts.length > 0) {
+        //compare and remove socAsts that are offline
+        console.log("Online Assistants: ", onlineAsts, " Society Assistants: ", socAsts);
+        for(ast in socAsts){
+            console.log("Loop ast: ",ast);
+            if(onlineAsts.includes(socAsts[ast])){
+                console.log("Found match. now adding");
+                resAsts.push(socAsts[ast]);
+            }
+        }
+        console.log("Final available assistants are: ", resAsts);
+        if(resAsts.length > 0)return resAsts;
+    }
+    else{
+        console.error("No online assistants found.");
+        return null;
+    }
+    return null;
 }
 
 /**

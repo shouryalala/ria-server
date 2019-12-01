@@ -19,7 +19,7 @@ exports.onUpdateHandler = async(change, context) => {
     
     //TODO is null check required?
     if(prev_data.status === util.VISIT_STATUS_UPCOMING && after_data.status === util.VISIT_STATUS_ONGOING) {
-        console.log("ASSISTANT START WORK TRIGGERED");
+        console.log(":VISIT UPDATE: ONGOING");
         if(after_data.user_id === undefined || after_data.ass_id === undefined){
             log.error("Invalid user/ass id");
             return;
@@ -30,9 +30,10 @@ exports.onUpdateHandler = async(change, context) => {
             let diff = after_data.vis_st_time - after_data.act_st_time;
             let docKey = `${visitPath.yearId}-${visitPath.monthId}-VDIFF`;  //ex: 2019-OCT-VDIFF
             let anObj = {};
-            anObj[`${visitPath._id}.in_diff`] = diff;//fieldValue.arrayUnion({in_diff: diff});                
-            //no need to batch. visit should be updated regardless of whether this goes through
-            anPromise = await db.collection(util.COLN_ASSISTANTS).doc(after_data.ass_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).update(anObj);
+            anObj[visitPath._id] = {};            
+            anObj[visitPath._id]['in_diff'] = diff;
+            //no need to batch. visit should be updated regardless of whether this goes through.. USE SET FOR CREATING MAP AND UPDATE FOR UPDATING IT
+            anPromise = await db.collection(util.COLN_ASSISTANTS).doc(after_data.ass_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).set(anObj, {merge:true});
         }
         let visitPathStr = `${util.COLN_VISITS}/${visitPath.yearId}/${visitPath.monthId}/${visitPath._id}`;
         let userStatusObj = {
@@ -58,19 +59,19 @@ exports.onUpdateHandler = async(change, context) => {
         console.log("Assitant analytics updated: ", anPromise, " User Activity updated: ", userActivityPromise, " Payload sent to user: ", sendPayloadFlag);
     }
     else if(prev_data.status === util.VISIT_STATUS_ONGOING && after_data.status === util.VISIT_STATUS_COMPLETED){
-        console.log("ASSISTANT WORK COMPLETE TRIGGERED");
+        console.log(":VISIT UPDATE: COMPLETED");
         if(after_data.user_id === undefined || after_data.ass_id === undefined){
             log.error("Invalid user/ass id");
             return;
         }        
         let anPromise;
-        console.log(after_data.act_en_time,"  ", after_data.vis_en_time);
-        if(after_data.act_en_time !== undefined && after_data.vis_en_time !== undefined) {
+        if(after_data.act_en_time !== undefined && after_data.vis_en_time !== undefined && after_data.act_st_time !== undefined) {
             //Add assistant anayltics
             let diff = after_data.vis_en_time - after_data.act_en_time;
             let docKey = `${visitPath.yearId}-${visitPath.monthId}-VDIFF`;  //ex: 2019-OCT-VDIFF
             let anObj = {};
-            anObj[`${visitPath._id}.out_diff`] = diff;//fieldValue.arrayUnion({in_diff: diff});
+            anObj[`${visitPath._id}.out_diff`] = diff;
+            anObj[`${visitPath._id}.total`] = after_data.act_en_time - after_data.act_st_time;
             //no need to batch. visit should be updated regardless of whether this goes through
             anPromise = await db.collection(util.COLN_ASSISTANTS).doc(after_data.ass_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).update(anObj);
         }
@@ -99,7 +100,9 @@ exports.onUpdateHandler = async(change, context) => {
 
     }
     else if(prev_data.status === util.VISIT_STATUS_UPCOMING && after_data.status === util.VISIT_STATUS_CANCELLED) {
-        console.log("Visit has been cancelled");
+        console.log(":VISIT UPDATE: CANCELLED");
+        //if(after_data) 
+
     }
     else{
         console.log("No block triggered. Skipping.");
