@@ -1,8 +1,7 @@
-# kanta-server
+# project-ria-cloud-functions
 implements cloud functions for firebase Baas
 
-
-links: 
+sample http trigger links: 
 Method 'Send Data Packet':
 https://us-central1-kanta-6f9f5.cloudfunctions.net/sendDataPacket?service=Dusting&address=ass&time=110:35pm
 
