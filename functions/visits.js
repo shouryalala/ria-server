@@ -1,5 +1,4 @@
 const util = require('./utils');
-const schedular =  require('./schedular');
 const {db, fieldValue} = require('./admin');
 
 exports.onUpdateHandler = async(change, context) => {
@@ -12,7 +11,7 @@ exports.onUpdateHandler = async(change, context) => {
         monthId: context.params.monthSubcollectionId,
         yearId: context.params.yearDocId
     }
-    if(!util.isValidPath(visitPath.yearId, visitPath.monthId, visitPath._id)) {
+    if(!util.isValidRequest(visitPath.yearId, visitPath.monthId, after_data.date, visitPath._id)) {
         console.error("Received visit update for invalid date range. Skipping request:", visitPath);
         return;
     }

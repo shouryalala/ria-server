@@ -22,8 +22,7 @@ exports.onCreateHandler =  (snap, context) => {
     }
     console.log("REQUEST: {YearId: ",requestPath.yearId,", MonthId: ",requestPath.monthId,", Request ID: ",requestPath._id,"}");
     
-    console.log(requestObj);
-    console.log(requestObj.exceptions);
+    console.log("Request Params: ", requestObj);    
     return requestAssistantService(requestPath, requestObj);
 }        
 
@@ -217,7 +216,7 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
         console.error("Undefined request Path/ request object");
         return 0;
     }
-    if(!util.isValidPath(requestPath.yearId, requestPath.monthId, requestPath._id)) {
+    if(!util.isValidRequest(requestPath.yearId, requestPath.monthId, requestObj.date, requestPath._id)) {
         console.error("Request from an expired date.", requestPath);
         return 0;
     }
