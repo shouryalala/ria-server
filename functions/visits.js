@@ -38,7 +38,7 @@ exports.onUpdateHandler = async(change, context) => {
         let userStatusObj = {
             visit_id: visitPathStr,
             visit_status: util.VISIT_STATUS_ONGOING,
-            modified_time: fieldValue.serverTimestamp
+            modified_time: fieldValue.serverTimestamp()
         }
         let userActivityPromise = await db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS).set(userStatusObj);
             //create payload to be sent to the user
@@ -79,7 +79,7 @@ exports.onUpdateHandler = async(change, context) => {
         let userStatusObj = {
             visit_id: visitPathStr,
             visit_status: util.VISIT_STATUS_COMPLETED,
-            modified_time: fieldValue.serverTimestamp
+            modified_time: fieldValue.serverTimestamp()
         }
         let userActivityPromise = await db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS).set(userStatusObj);
             //create payload to be sent to the user
@@ -111,23 +111,22 @@ exports.onUpdateHandler = async(change, context) => {
         }
         if(after_data[util.FLD_CANCLD_BY_USER] !== undefined && !after_data[util.FLD_CANCLD_BY_USER]) {
             console.log('Assistant cancelled visit. Logging cancellation and informing user.');
-            let docKey = `${requestPath.yearId}-${requestPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
+            let docKey = `${visitPath.yearId}-${visitPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
             let batch = db.batch();
             let astCancRef = db.collection(util.COLN_ASSISTANTS).doc(visitAst).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey); //.set(vPayload,{merge:true});
+            let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);//.set(userStatusObj);
             let vPayload = {
                 cancels: fieldValue.arrayUnion(visitPath._id)
             };                     
             batch.set(astCancRef, vPayload, {merge: true});
             //console.log("Added assistant analytics for cancellation", astCancPromise);
-
             //TODO add timestamp
             let userStatusObj = {
                 visit_id: visitPathStr,
                 visit_status: util.VISIT_STATUS_CANCELLED,
-                modified_time: fieldValue.serverTimestamp
-            }
-            let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);//.set(userStatusObj);
-            batch.set(userActivityRef, userStatusObj,{merge:false});
+                modified_time: fieldValue.serverTimestamp()
+            };                        
+            batch.set(userActivityRef, userStatusObj);
 
             try{
                 console.log("Setting both documents in a batch commit");
@@ -147,16 +146,16 @@ exports.onUpdateHandler = async(change, context) => {
                 };
                 let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_VISIT_CANCELLED);
                 console.log("Batch commit succesful! SendPayloadFlag: ", sendPayloadFlag);
-                return 1;
+                return;
             }catch(e) {
                 console.error("Batch write failed: ", e);
-                return 0;
+                return;
             }              
         }
         else if(after_data[util.FLD_CANCLD_BY_USER] !== undefined && after_data[util.FLD_CANCLD_BY_USER])  {
             console.log('User cancelled the visit. Logging cancellation');
             let batch = db.batch();
-            let docKey = `${requestPath.yearId}-${requestPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
+            let docKey = `${visitPath.yearId}-${visitPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
             let userCancRef = db.collection(util.COLN_USERS).doc(visitAst).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey); //.set(vPayload,{merge:true});
             let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);            
             let vPayload = {
@@ -164,8 +163,8 @@ exports.onUpdateHandler = async(change, context) => {
             };
             batch.set(userCancRef, vPayload, {merge:true});
             let uPayload = {
-                visit_status: 4,
-                modified_time: fieldValue.serverTimestamp
+                visit_status: util.VISIT_STATUS_NONE,
+                modified_time: fieldValue.serverTimestamp()
             };
             batch.set(userActivityRef, uPayload);
             try{
@@ -185,4 +184,11 @@ exports.onUpdateHandler = async(change, context) => {
         console.log("No block triggered. Skipping.");
     }
 
+}
+
+exports.onRebookHandler = async(change, context) => {
+    console.log('ONREBOOKHANDLER:: TRIGGERED');
+    console.log(change.before, change.after);
+    console.log(context);
+    
 }

@@ -81,7 +81,7 @@ exports.onUpdateHandler = async (change, context) => {
         var userStatusObj = {
             visit_id: visitObjRef.path,
             visit_status: util.VISIT_STATUS_UPCOMING,
-            modified_time: fieldValue.serverTimestamp
+            modified_time: fieldValue.serverTimestamp()
         }
         //let activityPromise = await userActivityRef.set(userStatusObj);
         batch.set(userActivityRef, userStatusObj);
