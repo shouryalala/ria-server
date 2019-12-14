@@ -350,7 +350,6 @@ exports.userRequestHandler = functions.firestore
     .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onCreate(requestModule.onCreateHandler);
 
-
 exports.assistantResponseHandler = functions.firestore
     .document('requests/{yearDocId}/{monthSubcollectionId}/{requestId}')
     .onUpdate(requestModule.onUpdateHandler);
@@ -359,4 +358,6 @@ exports.visitHandler = functions.firestore
     .document('visits/{yearDocId}/{monthSubcollectionId}/{visitId}')
     .onUpdate(visitModule.onUpdateHandler);
 
-
+exports.visitRebookingHandler = functions.firestore
+    .document('users/{userId}/activity/rebooking')
+    .onWrite(visitModule.onRebookHandler);
