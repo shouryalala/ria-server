@@ -5,7 +5,7 @@ exports.onUpdateHandler = async(change, context) => {
     console.log("::visitUpdateHandler:: INVOKED");
     const prev_data = change.before.data();
     const after_data = change.after.data();
-    //create a request path
+    //create a visit path
     let visitPath = {
         _id: context.params.visitId,
         monthId: context.params.monthSubcollectionId,
@@ -190,5 +190,31 @@ exports.onRebookHandler = async(change, context) => {
     console.log('ONREBOOKHANDLER:: TRIGGERED');
     console.log(change.before, change.after);
     console.log(context);
+    const prev_data = change.before.data();
+    const after_data = change.after.data();
+    /**
+     * trigger when user adds a rebook document specifying which visit to rebook
+     * cross verify with user activity to ensure this is valid?
+     * 
+     * NAAH fuck this lets just use the visit object to make the rebook handler
+     */
     
+    //if(prev_data !== undefined && )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

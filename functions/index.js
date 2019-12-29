@@ -6,6 +6,7 @@ const twilioAuthToken = 'eb2f66297a8319ecae91f53851c14778';
 const twilio = require('twilio')(twilioAccSid, twilioAuthToken);
 const requestModule = require('./requests');
 const visitModule = require('./visits');
+const paymentsModule = require('./payments');
 const util = require('./utils');
 
 /**
@@ -361,3 +362,5 @@ exports.visitHandler = functions.firestore
 exports.visitRebookingHandler = functions.firestore
     .document('users/{userId}/activity/rebooking')
     .onWrite(visitModule.onRebookHandler);
+
+exports.getAdhocCharge = functions.https.onRequest(paymentsModule.app);
