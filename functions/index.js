@@ -33,14 +33,14 @@ exports.createToken = functions.https.onRequest((req, res) => {
     
     if(mobile !== null) {
         auth.createCustomToken(mobile)
-            .then(function(customToken) {
+            .then((customToken) => {
                 console.log("Custom Token created successfully! Token: " + customToken);    
                 res.setHeader('Content-Type', 'application/json');
                 res.status(200);
                 res.send(JSON.stringify({ token: customToken }));
                 return 1;
             })
-            .catch(function(error) {
+            .catch((error) => {
                 console.log("Custom Token genration failed: " + error);
                 res.status(550).send();
             });
@@ -50,32 +50,28 @@ exports.createToken = functions.https.onRequest((req, res) => {
 
 //************ Dummy Methods ********************************************************
 //BOILERPLATE NOTIFICATION
-exports.sendNotification = functions.https.onRequest((req, res) => {
-	const sent_text = req.query.text;
-	const promises = [];	
-	const getInstaceIdToSend = admin.database().ref('/users').once('value').then(function(snapshot) {	
-	//return Promise.all(admin.database().ref('/users').once('value')).then(function(snapshot) {	
-		const instanceId = snapshot.val();
-		console.log('notifying right here right now yo' + instanceId);
+exports.sendNotification = functions.https.onRequest(async (req, res) => {
+	const sent_text = req.query.text;	
+    const instanceId = req.query.token;
+    console.log('notifying right here right now' + instanceId);
 
-		const payload = {
-			notification: {
-				title: "You've got work",
-				body: sent_text,
-				icon: "default"
-			}
-		};
-		return admin.messaging().sendToDevice(instanceId, payload)
-                .then(function (response) {
-                    console.log("Successfully sent message:", response);                    
-                    return 1;
-                })
-                .catch(function (error) {
-                    console.log("Error sending message:", error);
-                    return 0;
-                });
-	});
-    end();
+    const payload = {
+        notification: {
+            title: "You've got work",
+            body: sent_text,
+            icon: "default"
+        }
+    };
+    await admin.messaging().sendToDevice(instanceId, payload)
+            .then((response) => {
+                console.log("Successfully sent message:", response);                    
+                return 1;
+            })
+            .catch((error) => {
+                console.log("Error sending message:", error);
+                return 0;
+            });
+    res.status(200).send('Success');
 });
 
 
@@ -154,7 +150,7 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 	const time = req.query.time;
 	const priority = req.query.priority;
 	const promises = [];	
-	const getInstaceIdToSend = admin.database().ref('/users').once('value').then(function(snapshot) {	
+	const getInstaceIdToSend = admin.database().ref('/users').once('value').then((snapshot) => {	
 	//return Promise.all(admin.database().ref('/users').once('value')).then(function(snapshot) {	
 		const instanceId = snapshot.val();
 		console.log('sending data packet as a notification' + instanceId);
@@ -168,11 +164,11 @@ exports.sendDataPacket = functions.https.onRequest((req, res) => {
 			}
 		};
 		return admin.messaging().sendToDevice(instanceId, payload)
-                .then(function (response) {
+                .then((response) => {
                     console.log("Successfully sent message:", response);                    
                     return 1;
                 })
-                .catch(function (error) {
+                .catch((error) => {
                     console.log("Error sending message:", error);
                     return 0;
                 });
@@ -221,11 +217,11 @@ exports.sendDataPacketFixedClient = functions.https.onRequest((req, res) => {
         }
     };
     return admin.messaging().sendToDevice(instanceId, payload)
-            .then(function (response) {
+            .then((response) => {
                 console.log("Successfully sent message:", response);
                 return res.status(200).send("ok");
             })
-            .catch(function (error) {
+            .catch((error) => {
                 console.log("Error sending message:", error);
                 return res.status(500).send(error);
             });
@@ -302,7 +298,7 @@ exports.createComplexObject = functions.https.onRequest((req, res) => {
 
 
 exports.getTimetably = functions.https.onRequest((req, res) => {    
-    return getAvailableAssistant('abc','JUN',28,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then(function(response){
+    return getAvailableAssistant('abc','JUN',28,parseInt(req.query.stx),parseInt(req.query.enx),null,req.query.force).then((response) => {
         if(response === null) {
             console.log("Method failed");
             return res.status(500).send("BOOO");            
