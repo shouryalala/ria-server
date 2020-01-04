@@ -310,37 +310,6 @@ exports.getTimetably = functions.https.onRequest((req, res) => {
     });
 });
 
-
-/**
- * GETAVAILABLEASSISTANT
- * @param {string} address 
- * @param {string} service 
- * @param {string} time (in system millis) 
- * @param {array} exceptions (array of assistants to ommit from availability)
- * 
- * return assistant = {name, instanceId, assId}
- */
-var getAvailableAssistant2 = function(address, service, time, exceptions) {
-    console.log("::getAvailableAssistant::INVOKED");    
-
-    //TODO
-    var aId = "alYssfTuB2Y1tTw5jEaQfVCxUhX2";
-
-    return admin.firestore().collection(COLN_ASSISTANTS).doc(aId).get().then(doc => {
-        const aDoc = doc.data();
-        console.log("Fetched Available assitant details: Assistant name: " + aDoc.name + " ID: " + aId)
-        var assistant = {
-            name: aDoc.name,
-            assId: aId,
-            clientToken: aDoc.client_token
-        }
-        return assistant;
-    })
-    .catch(error => {
-        console.error("Error fetching record: " + error);
-        return null;
-    });   
-}
 //***********************************************************************************
 
 exports.userRequestHandler = functions.firestore

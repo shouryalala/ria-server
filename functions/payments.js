@@ -9,17 +9,17 @@ app.get('/', async (req,res) => {
     console.log('Payments Module:: GETCHARGE INVOKED:');
     if(!await requestAuthorised(req)) {
         console.error('The request recevied was not authorised. Discarding request');
-        res.status(500).send('Unauthorised Request');
+        return res.status(500).send('Unauthorised Request');
     }
     try{        
-        if(req.query.service !== undefined && req.query.socId !== undefined && req.query.reqTime !== undefined) {
-            res.status(200).send(getServiceCharge(req.query.service, req.query.socId, req.query.reqTime));
+        if(req.query.service === undefined || req.query.socId === undefined || req.query.reqTime === undefined) {
+            console.error('Received Invalid parameters: ',req.query.service, req.query.socId, req.query.reqTime);
+            return res.status(500).send('Invalid Parameters. Discarding message');                    
         }
-        console.error('Received Invalid parameters: ',req.query.service, req.query.socId, req.query.reqTime);
-        res.status(500).send('Invalid Parameters. Discarding message');        
+        return res.status(200).send(getServiceCharge(req.query.service, req.query.socId, req.query.reqTime));
     }catch(e) {
         console.error('Failed to execute get Charge method, ', e);
-        res.status(500).send(e);
+        return res.status(500).send('Request Failed');
     }
 });
 
