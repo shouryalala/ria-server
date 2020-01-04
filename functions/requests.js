@@ -23,7 +23,7 @@ exports.onCreateHandler =  (snap, context) => {
     console.log("REQUEST: {YearId: ",requestPath.yearId,", MonthId: ",requestPath.monthId,", Request ID: ",requestPath._id,"}");
     
     console.log("Request Params: ", requestObj);    
-    return requestAssistantService(requestPath, requestObj);
+    return requestAssistantService(requestPath, requestObj, requestObj['rejections'], null);
 }        
 
 

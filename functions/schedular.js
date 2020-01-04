@@ -167,21 +167,12 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         }else if(exceptions !== null && exceptions !== undefined) {
             console.log("In exceptions block");
             for(ex in exceptions) {
-                console.log(exceptions[ex]);            
+                console.log('Removing from assistant list: ' + exceptions[ex]);            
             }
             assistants = assistants.filter((value, index, arr) => {
                 return (!exceptions.includes(value));
             });
-            console.log("After removing exceptions: ", assistants);
-            // while((rAssistant=exceptions.pop()) !== null) {
-            //     console.log("Exceptions list item: " + rAssistant);
-            //     for(let i=0; i<assistants.length; i++) {
-            //         if(assistants[i] === rAssistant){
-            //             console.log(assistants[i] + " removed from list");
-            //             assistants.splice(i,1);
-            //         }
-            //     }
-            // }
+            console.log("After removing exceptions: ", assistants);            
         }
         let query = db.collection(util.COLN_TIMETABLE).doc(docId).collection(monthId);
         //var query = ttRef;
