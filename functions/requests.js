@@ -10,7 +10,7 @@ const {db, fieldValue} = require('./admin');
  * -sends her a request 
  */
 //better to get address from the packet than another db fetch i guess.
-exports.onCreateHandler =  (snap, context) => {
+exports.onCreateHandler =  async (snap, context) => {
     console.log("::userRequestHandler::INVOKED");    
     const requestObj = snap.data();
 
@@ -23,7 +23,7 @@ exports.onCreateHandler =  (snap, context) => {
     console.log("REQUEST: {YearId: ",requestPath.yearId,", MonthId: ",requestPath.monthId,", Request ID: ",requestPath._id,"}");
     
     console.log("Request Params: ", requestObj);    
-    return requestAssistantService(requestPath, requestObj, requestObj['rejections'], null);
+    return await requestAssistantService(requestPath, requestObj, requestObj['rejections'], null);
 }        
 
 
@@ -188,7 +188,7 @@ exports.onUpdateHandler = async (change, context) => {
                     }else{
                         r_rejections.push(a_id);
                     }                    
-                    return requestAssistantService(requestPath, after_data, r_rejections, null);
+                    return await requestAssistantService(requestPath, after_data, r_rejections, null);
                 }else{
                     console.error("Received error flag from unbookAssistantSlot.");
                     return 0;
@@ -212,9 +212,9 @@ exports.onUpdateHandler = async (change, context) => {
  * @param {array} exceptions - rejected assistant list
  * @param {string} forceAssistant - single assistant
  */
-var requestAssistantService = function(requestPath, requestObj, exceptions, forceAssistant) {
+var requestAssistantService = async function(requestPath, requestObj, exceptions, forceAssistant) {
     if(requestPath === undefined || requestObj === undefined){
-        console.error("Undefined request Path/ request object");
+        console.error("Undefined request Path/Request object");
         return 0;
     }
     if(!util.isValidRequest(requestPath.yearId, requestPath.monthId, requestObj.date, requestPath._id)) {
@@ -223,58 +223,76 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
     }
     let st_time = parseInt(requestObj.req_time);
     let en_time = st_time + util.getServiceDuration(requestObj.service, null);
+    let astSlotDetails;
+    try{
+        astSlotDetails = await schedular.getAvailableAssistant(requestObj.society_id, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant);
+    }catch(e) {
+        console.error("Function getAvailableAssistant Failed.",e);
+        return 0;
+    }
+    //ensure received result is not empty and not invalid
+    if(astSlotDetails === null || astSlotDetails === schedular.ERROR_CODE || astSlotDetails === schedular.NO_AST_AVLBLE_CODE || 
+        astSlotDetails._id === undefined || astSlotDetails.freeSlotLib === undefined) {
+        if(astSlotDetails === schedular.NO_AST_AVLBLE_CODE) {
+            //TODO 
+            console.log("No available maids at the moment.");        
+            return 0;
+        }
+        else{
+            console.error("Function getAvailableAssistant Failed.");
+            return 0;
+        }
+    }
 
-    return schedular.getAvailableAssistant(requestObj.society_id, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant)
-        .then(assistant => {
-            if(assistant === null || assistant._id === undefined || assistant.freeSlotLib === undefined) {
-                console.log("No available maids at the moment.");
+    console.log("Assistant details:: Id:",astSlotDetails._id," Booking assitant schedule: ", astSlotDetails.freeSlotLib);
+    let slotRef = util.sortSlotsByHour(astSlotDetails.freeSlotLib);
+    let bookingFlag;
+    try{
+        bookingFlag = await schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, astSlotDetails._id);
+    }catch(e) {
+        console.error("Received error tag from :bookAssistantSlot: ", e);
+        return 0;
+    }
+    if(bookingFlag === 0 || bookingFlag === undefined) {
+        //TODO
+        console.error("Booking failed. Inform user to try again", slotRef);     
+        return 0;
+    }
+    
+    if(flag === 1) {
+        const payload = {
+            data: {
+                rId: requestPath._id,
+                service: requestObj.service,                            
+                date: String(requestObj.date),                            
+                time: String(astSlotDetails.freeSlotLib[0].encode()),      //cant send number
+                address: requestObj.address,
+                socId: requestObj.society_id,
+                //Command: COMMAND_WORK_REQUEST
+            }
+        };
+
+        return util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST).then(response => {
+            if(response === true) {
+                console.log("Updating the snapshot's assignee.");
+                let pathRef = db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
+                //snap.ref.set({
+                return pathRef.set({
+                    asn_id: astSlotDetails._id,
+                    asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
+                    slotRef: slotRef
+                }, {merge: true});                            
+            }else{
+                console.error("Failed to send request to assistant. redirect request and log problem");
                 //TODO
                 return 0;
             }
-            console.log("Assistant details:: Id:",assistant._id," Booking assitant schedule: ", assistant.freeSlotLib);
-            let slotRef = util.sortSlotsByHour(assistant.freeSlotLib);
-            return schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, assistant._id).then(flag => {
-                if(flag === 1) {
-                    const payload = {
-                        data: {
-                            rId: requestPath._id,
-                            service: requestObj.service,                            
-                            date: String(requestObj.date),                            
-                            time: String(assistant.freeSlotLib[0].encode()),      //cant send number
-                            address: requestObj.address,
-                            socId: requestObj.society_id,
-                            //Command: COMMAND_WORK_REQUEST
-                        }
-                    };
-                    //return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
-                    return util.sendAssistantPayload(assistant._id, payload, util.COMMAND_WORK_REQUEST).then(response => {
-                        if(response === true) {
-                            console.log("Updating the snapshot's assignee.");
-                            let pathRef = db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
-                            //snap.ref.set({
-                            return pathRef.set({
-                                asn_id: assistant._id,
-                                asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
-                                slotRef: slotRef
-                            }, {merge: true});                            
-                        }else{
-                            console.error("Failed to send request to assistant. redirect request and log problem");
-                            //TODO
-                            return 0;
-                        }
-                    }, error => {
-                        console.error("Recevied error tag from :sendAssistantRequest: ", error);
-                        return 0;
-                    });
-                }
-                else{
-                    console.error("Booking failed. Inform user to try again", slotRef);
-                    //TODO
-                    return 0;
-                }
-            }, error => {
-                console.error("Received error tag from :bookAssistantSlot: ", error);
-                return 0;
-            });
-        });       
+        }, error => {
+            console.error("Recevied error tag from :sendAssistantRequest: ", error);
+            return 0;
+        });
+    }
+    else{
+        return 0;
+    }   
 }
