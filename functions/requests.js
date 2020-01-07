@@ -138,18 +138,7 @@ exports.onUpdateHandler = async (change, context) => {
             ref: aRef,
             payload: rPayload
         };
-        return await rerouteRequest(requestPath, after_data, astAnalyticsBlock);
-
-        try{
-            let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
-            let rejectionPromise = await db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).set(rPayload,{merge: true});
-            console.log("Rejection Promise: ", rejectionPromise);
-        }catch(error){
-            console.error("Error adding new document to assistant_rejections ", error);
-        }        
-
-
-    
+        return await rerouteRequest(requestPath, after_data, astAnalyticsBlock);   
     }
     console.log("All okay. no assitant code block triggered")
     return 1;
@@ -195,18 +184,26 @@ var requestAssistantService = function(requestPath, requestObj, exceptions, forc
                             socId: requestObj.society_id,
                             //Command: COMMAND_WORK_REQUEST
                         }
-                    };
-                    //return util.sendAssitantRequest(requestPath, requestObj, assistant).then(response => {
+                    };                    
                     return util.sendAssistantPayload(assistant._id, payload, util.COMMAND_WORK_REQUEST).then(response => {
                         if(response === true) {
-                            console.log("Updating the snapshot's assignee.");
-                            let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
-                            //snap.ref.set({
+                            console.log("Updating the snapshot's assignee and settingTimeout.");
+                            let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
                             return pathRef.set({
                                 asn_id: assistant._id,
                                 asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
                                 slotRef: slotRef
-                            }, {merge: true});                            
+                            }, {merge: true}).then(res => {
+                                setTimeout(() => {
+                                    console.log("Invoking routine Request status check for requestId: " + requestPath._id);
+                                    checkRequestStatus(requestPath, assistant._id);
+                                }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
+
+                                return 1;
+                            }).catch(e => {
+                                console.error("Updating assistant snapshot to assigned: Failed", e);
+                                return 0;
+                            });                             
                         }else{
                             console.error("Failed to send request to assistant. redirect request and log problem");
                             //TODO
@@ -292,7 +289,7 @@ var checkRequestStatus = async function(requestPath, assId) {
  * REROUTEREQUEST
  * @param {yearId: string, monthId: string, _id: string} requestPath 
  * @param {Request Obj} requestObj 
- * @param {ref: string, payload: obj} astAnalyticsBlk 
+ * @param {ref: string, payload: obj} astAnalyticsBlk, to be added to a batch command
  */
 var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
     astAnalyticsBlk = astAnalyticsBlk || 0; //sets to 0 if not passed by calling function
@@ -312,7 +309,7 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
     try{
         let unbookFlag = await schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, reqSlotRef, a_id);
         console.log("Unbooked Assistant Timetable: ", unbookFlag.toString());
-        if(flag === 1) {
+        if(unbookFlag === 1) {
             //revert request fields
             //THIS will trigger request update again! BE CAREFUL
             let delRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
@@ -329,7 +326,7 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
                 await batch.commit();
                 console.log("Batch command complete for deleting payload and updating analytics if any.");
                 //request Assistant Service again but add the current rejected assistant in the exceptions list                    
-                if(r_rejections === undefined || r_rejections.length === 0) {
+                if(r_rejections === undefined || r_rejections === null || r_rejections.length === 0) {
                     r_rejections = [a_id];
                 }else{
                     r_rejections.push(a_id);
