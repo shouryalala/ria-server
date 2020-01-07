@@ -119,10 +119,8 @@ exports.onUpdateHandler = async (change, context) => {
 
     else if(prev_data.asn_response === util.AST_RESPONSE_NIL && prev_data.status === util.REQ_STATUS_UNASSIGNED &&
         after_data.asn_response === util.AST_RESPONSE_REJECT && after_data.status !== util.REQ_STATUS_ASSIGNED){        
-        console.log("Assistant rejected response. Logging rejection and rerouting request.");
-        let reqSlotRef = after_data.slotRef;
-        let a_id = after_data.asn_id;
-        let r_rejections = after_data.rejections; 
+        console.log("Assistant rejected response. Logging rejection and rerouting request.");        
+        let a_id = after_data.asn_id;        
         /**
          * Current:OPTION 1:                                  OPTION 2:
          * - log rejection in assistant_rejections          - revert timetable object
@@ -133,73 +131,14 @@ exports.onUpdateHandler = async (change, context) => {
         let rPayload = {
             rejections: fieldValue.arrayUnion(requestPath._id)
         };
-
-        // try{
-        //     let rejectionPromise = await db.collection(util.COLN_ASSISTANT_ANALYTICS).doc(requestPath.yearId).collection(requestPath.monthId).doc(a_id).set(rPayload,{merge: true});
-        //     console.log("Rejection Promise: ", rejectionPromise);
-        // }catch(error){
-        //     console.error("Error adding new document to assistant_rejections ", error);
-        // }        
-
-        try{
-            let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
-            let rejectionPromise = await db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey).set(rPayload,{merge: true});
-            console.log("Rejection Promise: ", rejectionPromise);
-        }catch(error){
-            console.error("Error adding new document to assistant_rejections ", error);
-        }        
-
-
-        let delPayload = {
-            asn_id: fieldValue.delete(),
-            asn_response: util.AST_RESPONSE_NIL,
-            slotRef: fieldValue.delete(),
-            status: util.REQ_STATUS_UNASSIGNED,
-            rejections: fieldValue.arrayUnion(a_id)
-        }  
-
-        // let createPayload = {
-        //     address: after_data.address,
-        //     asn_response: util.AST_RESPONSE_NIL,
-        //     date: after_data.date,            
-        //     req_time: after_data.req_time,
-        //     service: after_data.service,
-        //     society_id: after_data.society_id,
-        //     status: util.REQ_STATUS_UNASSIGNED,
-        //     user_id: after_data.user_id,
-        //     timestamp: Date.now()
-        // }
-
-        if(reqSlotRef !== undefined) {
-            return schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, after_data.date, reqSlotRef, a_id).then(async flag => {
-                if(flag === 1) {
-                    try{
-                        //revert request fields
-                        //THIS will trigger this method again!
-                        let reqDelPromise = await db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).set(delPayload,{merge: true});
-                        console.log("Reverted request to accept new assignee: ", requestPath._id, reqDelPromise);
-                    }catch(error) {
-                        console.error("Error reverting request fields: ", delPayload, error);
-                        return 0;
-                    }
-                    //request Assistant Service again but add the current rejected assistant in the exceptions list                    
-                    if(r_rejections === undefined || r_rejections.length === 0) {
-                        r_rejections = [a_id];
-                    }else{
-                        r_rejections.push(a_id);
-                    }                    
-                    return await requestAssistantService(requestPath, after_data, r_rejections, null);
-                }else{
-                    console.error("Received error flag from unbookAssistantSlot.");
-                    return 0;
-                }
-            }).catch(error => {
-                console.error("Error unbooking slot: " + error);
-                return 0;
-            });
-        }
-        //TODO
-        return 1;
+      
+        let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
+        let aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+        let astAnalyticsBlock = {
+            ref: aRef,
+            payload: rPayload
+        };
+        return await rerouteRequest(requestPath, after_data, astAnalyticsBlock);   
     }
     console.log("All okay. no assitant code block triggered")
     return 1;
@@ -275,19 +214,28 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
         return util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST).then(response => {
             if(response === true) {
                 console.log("Updating the snapshot's assignee.");
-                let pathRef = db.collection(util.COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
-                //snap.ref.set({
+                let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
                 return pathRef.set({
-                    asn_id: astSlotDetails._id,
+                    asn_id: assistant._id,
                     asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
                     slotRef: slotRef
-                }, {merge: true});                            
+                }, {merge: true}).then(res => {
+                    setTimeout(() => {
+                        console.log("Invoking routine Request status check for requestId: " + requestPath._id);
+                        checkRequestStatus(requestPath, assistant._id);
+                    }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
+
+                    return 1;
+                }).catch(e => {
+                    console.error("Updating assistant snapshot to assigned: Failed", e);
+                    return 0;
+                });                             
             }else{
                 console.error("Failed to send request to assistant. redirect request and log problem");
                 //TODO
                 return 0;
             }
-        }, error => {
+          }, error => {
             console.error("Recevied error tag from :sendAssistantRequest: ", error);
             return 0;
         });
@@ -295,4 +243,123 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     else{
         return 0;
     }   
+}
+
+/**
+ * CHECKREQUESTSTATUS
+ * @param {yearId: string, monthId: string, _id: string} requestPath
+ * @param {string} assId (assistant ID)
+ * 
+ * method checks whether assistant has responded to request or not after waiting for a period of time. 
+ * -if not, restart request handling process
+ */
+var checkRequestStatus = async function(requestPath, assId) {
+    console.log("::checkRequestStatus::INVOKED");
+    let docSnapshot;
+    try{
+        docSnapshot = await db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).get();
+        const aDoc = docSnapshot.data();
+        if(aDoc.asn_id === undefined && aDoc.asn_response === undefined) {
+            console.log("Request has no assignee yet. Prolly no assistant was available");
+            return 1;
+        }
+        if(aDoc.asn_id !== assId) {
+            console.log("checkRequestStatus for RequestId: " + requestPath._id + ", AssistantId: " + assId + " outdated. Request reassigned since.");
+            return 1;
+        }
+        else {
+            if(aDoc.asn_response === util.AST_RESPONSE_ACCEPT){
+                //TODO maybe verify if status is assigned yet or not. not reqd
+                console.log("checkRequestStatus verified request: " + rId + " All in order.");
+                return 1;
+                
+            }else if(aDoc.asn_response === util.AST_RESPONSE_REJECT){
+                //should never happen. corner case when request is in process of being rerouted and gets caught by this method
+                console.error("Request: " + requestPath._id + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.");
+                return 0;
+            }else if(aDoc.asn_response === util.AST_RESPONSE_NIL){
+                //the assigned assistant is still the same and the her response is stil nil
+                //log analytics
+                console.log("Request: " + requestPath._id + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");                
+                let rPayload = {
+                    noresponse: fieldValue.arrayUnion(requestPath._id)
+                };
+                let docKey = `${requestPath.yearId}-${requestPath.monthId}-NORES`;  //ex: 2020-JAN-NORES
+                let aRef = db.collection(util.COLN_ASSISTANTS).doc(assId).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+                let astAnalyticsBlk = {
+                    ref: aRef,
+                    payload: rPayload
+                };
+
+                return await rerouteRequest(requestPath, aDoc, astAnalyticsBlk);
+            }
+            else{
+                //what the fuck??
+            }
+        }
+    }catch(e) {
+        console.error("Error in retrieving record: " + e);
+        return 0;
+    }   
+}
+
+/**
+ * REROUTEREQUEST
+ * @param {yearId: string, monthId: string, _id: string} requestPath 
+ * @param {Request Obj} requestObj 
+ * @param {ref: string, payload: obj} astAnalyticsBlk, to be added to a batch command
+ */
+var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
+    astAnalyticsBlk = astAnalyticsBlk || 0; //sets to 0 if not passed by calling function
+    if(requestPath === undefined || requestObj === undefined || requestObj.asn_id === undefined || requestObj.slotRef === undefined) {
+        console.error("Invalid parameters. Dropping rerouteRequest. Paramters: ",requestPath,requestObj);
+        return 0;
+    }
+    let reqSlotRef = requestObj.slotRef;
+    let a_id = requestObj.asn_id;
+    let r_rejections = requestObj.rejections; 
+
+    let batch = db.batch();
+    if(astAnalyticsBlk !== 0) {
+        batch.set(astAnalyticsBlk.ref, astAnalyticsBlk.payload, {merge: true});
+    }   
+    
+    try{
+        let unbookFlag = await schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, reqSlotRef, a_id);
+        console.log("Unbooked Assistant Timetable: ", unbookFlag.toString());
+        if(unbookFlag === 1) {
+            //revert request fields
+            //THIS will trigger request update again! BE CAREFUL
+            let delRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
+            let delPayload = {
+                asn_id: fieldValue.delete(),
+                asn_response: util.AST_RESPONSE_NIL,
+                slotRef: fieldValue.delete(),
+                status: util.REQ_STATUS_UNASSIGNED,
+                rejections: fieldValue.arrayUnion(a_id)
+            } 
+            batch.set(delRef, delPayload, {merge: true});
+
+            try{
+                await batch.commit();
+                console.log("Batch command complete for deleting payload and updating analytics if any.");
+                //request Assistant Service again but add the current rejected assistant in the exceptions list                    
+                if(r_rejections === undefined || r_rejections === null || r_rejections.length === 0) {
+                    r_rejections = [a_id];
+                }else{
+                    r_rejections.push(a_id);
+                }                    
+                return requestAssistantService(requestPath, after_data, r_rejections, null);
+            }catch(e) {
+                console.error("Batch commit failed: ", e);
+                return 0;
+            }
+        }else{
+            console.error("Received error flag from unbookAssistantSlot.");
+            return 0;
+        }
+    }catch(e) {
+        console.error("Error unbooking slots: " + e);
+        return 0;
+    }
 }

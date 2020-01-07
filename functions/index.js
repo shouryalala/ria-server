@@ -262,7 +262,7 @@ exports.createDummyRequest = functions.https.onRequest((req, res) => {
         timestamp: Date.now()
     }
 
-    return db.collection(util.COL_REQUEST).doc(yearDoc).collection(monthSubCollection).add(packet).then(() => {
+    return db.collection(util.COLN_REQUESTS).doc(yearDoc).collection(monthSubCollection).add(packet).then(() => {
         console.log("Dummy request created!");
         return res.status(200).send("Created automagically!");
     })

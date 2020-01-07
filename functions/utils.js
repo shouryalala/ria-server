@@ -6,7 +6,7 @@ const { db, messaging } = require('./admin');
 //Firebase collections
 const COLN_USERS = "users";
 const COLN_ASSISTANTS = "assistants";
-const COL_REQUEST = "requests";
+const COLN_REQUESTS = "requests";
 const COLN_VISITS = "visits";
 const COLN_TIMETABLE = "timetable";
 const COLN_ASSISTANT_ANALYTICS = "ast_analytics";
@@ -318,49 +318,6 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
 }
 
 /**
- * CHECKREQUESTSTATUS
- * @param {yearId: string, monthId: string, _id: string} requestPath
- * @param {string} assId (assistant ID)
- * 
- * method checks whether assistant has responded to request or not after waiting for a period of time. 
- * -if not, restart request handling process
- */
-var checkRequestStatus = function(requestPath, assId) {
-    console.log("::checkRequestStatus::INVOKED");
-    db.collection(COL_REQUEST).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).get().then(doc => {
-        const aDoc = doc.data();
-        if(aDoc.asn_id === null && aDoc.asn_response === null) {
-            console.error("Request has no assignee yet!");
-            return 0;
-        }
-        if(aDoc.asn_id === assId) {
-            if(aDoc.asn_response === AST_RESPONSE_NIL){
-                //the assigned assistant is still the same and the her response is still nil
-                //Houston we have a problem
-                console.log("Request: " + requestPath._id + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");
-                return 0;
-                //TODO
-            }else if(aDoc.asn_response === AST_RESPONSE_ACCEPT){
-                //TODO maybe verify if status is assigned yet or not. not reqd
-                console.log("checkRequestStatus verified request: " + rId + " All in order.");
-                return 1;
-            }else{
-                //should never happen. corner case when request is in process of being rerouted and gets caught by this method
-                console.error("Request: " + requestPath._id + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.");
-                return 0;
-            }
-        }else{
-            console.log("checkRequestStatus for RequestId: " + requestPath._id + ", AssistantId: " + assId + " outdated. Request reassigned.");
-            return 1;
-        }
-    })
-    .catch(error => {
-        console.error("Error in retrieving record: " + error);
-        return 0;
-    });
-}
-
-/**
  * @param {number} time 
  * DECODEHOURMINFROMTIME
  * - divides number in hours and minutes
@@ -434,12 +391,12 @@ var isValidRequest = function(yearId, monthId, date, pId) {
 }
 
 module.exports = {
-    COLN_USERS,COLN_ASSISTANTS,COL_REQUEST,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
+    COLN_USERS,COLN_ASSISTANTS,COLN_REQUESTS,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
     SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,
-    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,dummy1,dummy2,dummy3,
-    sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,checkRequestStatus,decodeHourMinFromTime,getSlotMinTime,
+    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
+    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,
     getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isValidRequest
     //sendAssitantRequest
 }
