@@ -16,10 +16,6 @@ const {db, fieldValue} = require('./admin');
  * 
  * return Obj = {_id: string, FreeSlotLib: [DecodedTime]free slots array}
  */
-exports.ERROR_CODE = -1;
-exports.NO_AST_AVLBLE_CODE = 0;
-exports.SUCCESS_CODE = 420;
-
 exports.getAvailableAssistant = async function(society_id, monthId, date, st_time, en_time, exceptions, forceAssistant) {
     console.log("::getAvailableAssistant::INVOKED::Params{date: " + date + ", st_time: " 
     + st_time + ", en_time: " + en_time + ", exceptions: " + exceptions + ", forceAssistant: " + forceAssistant + "}");    
@@ -54,12 +50,12 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
         st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
     }    
     let res = await getTimetable(society_id, util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant);
-    if(res === ERROR_CODE) {
+    if(res === util.ERROR_CODE) {
         console.error("Received an error from getTimetable. Exiting method");
-        return ERROR_CODE;
-    }else if(res === NO_AST_AVLBLE_CODE) {
+        return res;
+    }else if(res === util.NO_AVAILABLE_AST_CODE) {
         console.log("No assistant found after search.");
-        return NO_AST_AVLBLE_CODE;
+        return res;
     }
 
     const num_slots = (en_time_obj.getHours() - st_time_obj.getHours())*util.TOTAL_SLOTS + (en_time_obj.getSlot() - st_time_obj.getSlot());
@@ -145,7 +141,7 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         + ")\tMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
 
     let assistants = await getCurrentlyAvailableAsts(societyId);    
-    if(assistants === null || assistants.length === 0)return NO_AST_AVLBLE_CODE;
+    if(assistants === null || assistants.length === 0)return util.NO_AVAILABLE_AST_CODE;
     console.log('Fetched Assistant list: ', assistants);
     
     if(forceAssistant !== null && forceAssistant !== undefined) {  
@@ -156,7 +152,7 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         }
         else{
             console.log('ForceAssistant not found in list of online Assistants');
-            return NO_AST_AVLBLE_CODE;
+            return util.NO_AVAILABLE_AST_CODE;
         }
     }else if(exceptions !== null && exceptions !== undefined) {        
         for(ex in exceptions) {
@@ -234,7 +230,7 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         return sObj;
     }).catch(error => {
         console.error("Failed to generate table: " + error);
-        return ERROR_CODE;
+        return util.ERROR_CODE;
     });    
 }
 
