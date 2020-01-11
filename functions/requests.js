@@ -20,7 +20,9 @@ exports.onCreateHandler =  async (snap, context) => {
         monthId: context.params.monthSubcollectionId,
         yearId: context.params.yearDocId
     }
+    //let requestPath = new util.DocPath(context.params.yearDocId,context.params.monthSubcollectionId,context.params.requestId);
     console.log("REQUEST: {YearId: ",requestPath.yearId,", MonthId: ",requestPath.monthId,", Request ID: ",requestPath._id,"}");    
+    //console.log("REQUEST: {YearId: ",requestPath.getYearId(),", MonthId: ",requestPath.getMonthId(),", Request ID: ",requestPath.getId(),"}");    
     console.log("Request Params: ", requestObj);
 
     let flag;
@@ -64,28 +66,32 @@ exports.onUpdateHandler = async (change, context) => {
         //assumption: the visit and request objects are in the SAME YEAR AND MONTH. thus only saving requestID        
         let vis_st = util.getSlotMinTime(after_data.slotRef);
         let vis_en = util.getSlotMaxTime(after_data.slotRef);
-        var visitObj = {
-            req_id: requestPath._id,
-            user_id: after_data.user_id.trim(),
-            user_mobile: after_data.user_mobile.trim(),
-            ass_id: after_data.asn_id.trim(),
-            date: after_data.date,
-            service: after_data.service,
-            address: after_data.address,
-            society_id: after_data.society_id.trim(),
-            req_st_time: after_data.req_time,
-            vis_st_time: vis_st.encode(),
-            vis_en_time: vis_en.encode(),
-            status: util.VISIT_STATUS_UPCOMING,
-            timestamp: fieldValue.serverTimestamp()
-        }
+        // var visitObj = {
+        //     req_id: requestPath._id,
+        //     user_id: after_data.user_id.trim(),
+        //     user_mobile: after_data.user_mobile.trim(),
+        //     ass_id: after_data.asn_id.trim(),
+        //     date: after_data.date,
+        //     service: after_data.service,
+        //     address: after_data.address,
+        //     society_id: after_data.society_id.trim(),
+        //     req_st_time: after_data.req_time,
+        //     vis_st_time: vis_st.encode(),
+        //     vis_en_time: vis_en.encode(),
+        //     status: util.VISIT_STATUS_UPCOMING,
+        //     timestamp: fieldValue.serverTimestamp()
+        // }
+        var  visitObj = new util.Visit(requestPath._id,after_data.user_id.trim(),after_data.user_mobile.trim(),
+            after_data.asn_id.trim(),after_data.date,after_data.service,after_data.address,
+            after_data.society_id.trim(),after_data.req_time,vis_st.encode(),
+            vis_en.encode(),undefined,undefined,util.VISIT_STATUS_UPCOMING,undefined,fieldValue.serverTimestamp());
         console.log(visitObj);
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
         let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);
         
         let batch = db.batch();
         //set visit document        
-        batch.set(visitObjRef, visitObj);
+        batch.set(visitObjRef, visitObj.toJSON());
         console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
         //set user activity            
         var userStatusObj = {

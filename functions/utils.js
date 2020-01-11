@@ -87,8 +87,69 @@ class DecodedTime {
 
     encode(){return this.hour*3600 + this.min*60;}
 
-    toString(){return "(Hour: " + this.hour + ", Min: " + this.min + ")";}
+    toString(){return `(Hour:${this.hour}, Min:${this.min})`;}    
 }
+
+class DocPath {
+    constructor(yearDoc, monthSubColn, idDoc) {
+        this.yearId = yearDoc;
+        this.monthId = monthSubColn;
+        this._id = idDoc;
+    }
+
+    getId(){return this._id;}
+
+    getMonthId(){return this.monthId;}
+
+    getYearId(){return this.yearId;}
+
+    toString(){return `/${this.yearId}/${this.monthId}/${this._id}`;}
+}
+
+class Visit {
+    constructor(reqId,userId,userMobile,astId,date,service,address,
+        socId,reqStTime,visStTime,visEnTime,actStTime,actEnTime,
+        status,cncldByUser,timestamp){
+        this.reqId = reqId;
+        this.userId = userId;
+        this.userMobile = userMobile;
+        this.astId = astId;
+        this.date = date;
+        this.service = service;
+        this.address = address;
+        this.socId = socId;
+        this.reqStTime = reqStTime;
+        this.visStTime = visStTime;
+        this.visEnTime = visEnTime;
+        this.actStTime = actStTime;
+        this.actEnTime = actEnTime;
+        this.status = status;
+        this.cncldByUser = cncldByUser;
+        this.timestamp = timestamp;
+    }
+
+    toJSON() {
+        return{
+            req_id: this.reqId,
+            user_id: this.userId,
+            user_mobile: this.userMobile,
+            ass_id: this.astId,
+            date: this.date,
+            service: this.service,
+            address: this.address,
+            society_id: this.socId,
+            req_st_time: this.reqStTime,
+            vis_st_time: this.visStTime,
+            vis_en_time: this.visEnTime,
+            act_st_time: this.actStTime,
+            act_en_time: this.actEnTime,
+            status: this.status,
+            cncld_by_user: this.cncldByUser,
+            timestamp: this.timestamp
+        }
+    }
+}
+
 /** 
  * @param {enum} service  
  * @param {number} bhk 
@@ -178,43 +239,6 @@ var getSlotMaxTime = function(slotRef){
     return null;    
 }
 
-
-/**
- * SENDASSISTANTREQUEST
- * @param {yearId: string, monthId: string, _id: string} requestPath
- * @param {service, address, time} request (contains entire request Obj)
- * @param {_id: string, clientToken: string, freeSlotLib: DecodedTime[]} assistant 
- */
-// var sendAssitantRequest = function(requestPath, request, assistant) {
-//     console.log("::sendAssitantRequest::INVOKED");        
-//     console.log("Encoded time: " + assistant.freeSlotLib[0].encode());
-//     const payload = {
-//         data: {
-//             RID: requestPath._id,
-//             Service: request.service,
-//             Address: request.address,
-//             Time: String(assistant.freeSlotLib[0].encode()),      //cant send number
-//             Command: COMMAND_WORK_REQUEST
-//         }
-//     };
-
-//     console.log("Attempting to send the request to assistant. Request ID: " + requestPath._id + "to Assistant: " + assistant._id);
-//     //send payload to assistant        
-//     return messaging.sendToDevice(assistant.clientToken, payload)
-//             .then(response => {
-//                 console.log("Request sent succesfully! Request ID: " + requestPath._id);
-//                 setTimeout(() => {
-//                     console.log("Invoking routine Request status check for requestId: " + requestId);
-//                     checkRequestStatus(requestPath, assistant._id);
-//                 }, REQUEST_STATUS_CHECK_TIMEOUT);
-//                 return 1;
-//             })
-//             .catch(error => {
-//                 console.error("Request couldnt be sent: Request ID: " + requestPath._id + "\nError: " + error);
-//                 //TODO
-//                 return 0;
-//             });
-// }
 
 var sendDataPayload = function(clientToken, payload) {
     console.log("::sendDataPayload::INVOKED");
@@ -399,12 +423,19 @@ var notifyUserRequestClosed = async function(payload, code) {
     console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
 }
 
+var getVisitObj = function(vObj) {
+    return new Visit(vObj.req_id,vObj.user_id,vObj.user_mobile,vObj.ass_id,vObj.date,vObj.service,
+        vObj.address,vObj.society_id,vObj.req_st_time,vObj.vis_st_time,vObj.vis_en_time,
+        vObj.act_st_time,vObj.act_en_time,vObj.status,vObj.cncld_by_user,vObj.timestamp);
+}
+
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COLN_REQUESTS,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
     SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
-    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,
-    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed    
+    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,DocPath,Visit,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,
+    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed,
+    getVisitObj    
 }

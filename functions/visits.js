@@ -3,8 +3,10 @@ const {db, fieldValue} = require('./admin');
 
 exports.onUpdateHandler = async(change, context) => {
     console.log("::visitUpdateHandler:: INVOKED");
-    const prev_data = change.before.data();
-    const after_data = change.after.data();
+    // const prev_data = change.before.data();
+    // const after_data = change.after.data();
+    const prevVisit = util.getVisitObj(change.before.data());
+    const curVisit = util.getVisitObj(change.after.data());
     //create a visit path
     let visitPath = {
         _id: context.params.visitId,
