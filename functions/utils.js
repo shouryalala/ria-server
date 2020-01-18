@@ -259,8 +259,8 @@ var sendUserPayload = async function(userID, payload, command) {
             }
             console.log("Payload being delivered: ", payload);
             try{                
-                await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
+                let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload, fcmResponse);
                 return true;
             }catch(error) {
                 console.error("Payload failed to be sent: ", error);
@@ -301,8 +301,8 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
             }
             console.log("Payload being sent: ", payload);
             try{                
-                await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
+                let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload, fcmResponse);
                 return SUCCESS_CODE;
             }catch(error) {
                 console.error("Payload failed to be sent: ", error, new Error("Assistant payload failed to be sent: " + error.toString()));

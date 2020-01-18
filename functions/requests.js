@@ -238,14 +238,14 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
                 let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
                 try{
                     await pathRef.set({
-                        asn_id: assistant._id,
+                        asn_id: astSlotDetails._id,
                         asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
                         slotRef: slotRef
                     }, {merge: true});
 
                     setTimeout(() => {
                         console.log("Invoking routine Request status check for requestId: " + requestPath._id);
-                        checkRequestStatus(requestPath, assistant._id);
+                        checkRequestStatus(requestPath, astSlotDetails._id);
                     }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
                     return util.SUCCESS_CODE;
                 }catch(e) {
@@ -294,7 +294,7 @@ var checkRequestStatus = async function(requestPath, assId) {
         else {
             if(aDoc.asn_response === util.AST_RESPONSE_ACCEPT){
                 //TODO maybe verify if status is assigned yet or not. not reqd
-                console.log("checkRequestStatus verified request: " + rId + " All in order.");
+                console.log("checkRequestStatus verified request: " + requestPath._id + " All in order.");
                 return util.SUCCESS_CODE;
                 
             }else if(aDoc.asn_response === util.AST_RESPONSE_REJECT){
@@ -385,7 +385,7 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
                 }else{
                     r_rejections.push(a_id);
                 }                    
-                return await requestAssistantService(requestPath, after_data, r_rejections, null);
+                return await requestAssistantService(requestPath, requestObj, r_rejections, null);
             }catch(e) {
                 console.error("Batch commit failed: ", e,
                     new Error("RerouteRequest batch commit failed: " + e.toString()));
