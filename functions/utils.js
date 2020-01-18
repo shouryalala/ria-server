@@ -58,6 +58,11 @@ const VISIT_STATUS_ONGOING = 2;
 const VISIT_STATUS_UPCOMING = 3;
 const VISIT_STATUS_NONE = 4;    //no service booked
 //
+//Return Codes:
+const NO_AVAILABLE_AST_CODE = 2;
+const ERROR_CODE = 0;
+const SUCCESS_CODE = 1;
+//
 const FLD_CANCLD_BY_USER = "cncld_by_user";
 const TOTAL_SLOTS = 6;
 const BUFFER_TIME = 1200;
@@ -254,8 +259,8 @@ var sendUserPayload = async function(userID, payload, command) {
             }
             console.log("Payload being delivered: ", payload);
             try{                
-                await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
+                let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload, fcmResponse);
                 return true;
             }catch(error) {
                 console.error("Payload failed to be sent: ", error);
@@ -276,7 +281,7 @@ var sendUserPayload = async function(userID, payload, command) {
  * @param {String} userID 
  * @param {Obj} payload 
  * @param {String} command 
- * returns boolean to indicate success
+ * returns success/error code to indicate success
  */
 var sendAssistantPayload = async function(assistantID, payload, command) {    
     console.log("::sendUserPayload::INVOKED");
@@ -290,30 +295,25 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
         if(assistantToken !== undefined && assistantToken !== undefined && assistantToken.data() !== undefined) {
             //token now available:: tokenData: {token:.. , timestamp: ..}
             let tokenData = assistantToken.data();
-            console.log("Token Data: ", tokenData);
-            //add click action and command to data bracket and notification bracket
-            console.log("Payload Before: ", payload);
-            // if(payload['notification'] !== undefined){
-            //     payload.notification['click_action'] = 'FLUTTER_NOTIFICATION_CLICK';
-            // }
+            console.log("Token Data: ", tokenData);            
             if(payload['data'] !== undefined){        
                 payload.data['Command'] = command;  //TODO change assistant payload case to lower            
             }
-            console.log("Payload After: ", payload);
+            console.log("Payload being sent: ", payload);
             try{                
-                await messaging.sendToDevice(tokenData.token, payload);
-                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload);
-                return true;
+                let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload, fcmResponse);
+                return SUCCESS_CODE;
             }catch(error) {
-                console.error("Payload failed to be sent: ", error);
-                return false;
+                console.error("Payload failed to be sent: ", error, new Error("Assistant payload failed to be sent: " + error.toString()));
+                return ERROR_CODE;
             }
         }
-        return false;
+        return ERROR_CODE;
         /* eslint-disable require-atomic-updates */    
     }catch(error) {
-        console.error("Error fetching client_token: ", error);
-        return false;
+        console.error("Error fetching client_token: ", error, new Error("Failed to fetch Assistant Client Token: " + error.toString()));
+        return ERROR_CODE;
     }
 }
 
@@ -381,13 +381,22 @@ var getTTPathName = function(yearId, monthId, date, hour) {
  * @param {String} pId 
  * returns boolean
  */
-var isValidRequest = function(yearId, monthId, date, pId) {
+var isRequestDateValid = function(yearId, monthId, date, pId) {
     if(yearId === undefined || monthId === undefined || date === undefined || pId === undefined){
         console.error("Undefined Parameters:: yr:",yearId,",month:",monthId,"date:",date,"rId:",pId);
         return false;
     }
     var tDate = new Date();
     return (tDate.getFullYear().toString() === yearId.trim() && yrCodes[tDate.getMonth()] === monthId.trim() && tDate.getDate() === date);
+}
+
+var isRequestValid = function(requestObj) {
+    console.log("ISREQUESTVALID::INVOKED");
+    return true;
+}
+
+var notifyUserRequestClosed = async function(payload, code) {
+    console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
 }
 
 module.exports = {
@@ -397,6 +406,5 @@ module.exports = {
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,
-    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isValidRequest
-    //sendAssitantRequest
+    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed    
 }

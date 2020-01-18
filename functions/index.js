@@ -182,8 +182,8 @@ exports.hitMeUp = functions.https.onRequest((req, res) => {
     twilio.calls
       .create({
          url: "https://handler.twilio.com/twiml/EH85c13367eb9bd0456c90a363f632ee7c",         
-         to: '+919986643444',
-         from: '+12019925236'
+         to: req.query.mobile,
+         from: '+12056512878'
        })
       .then(call => {
         console.log(call.sid);

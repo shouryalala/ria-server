@@ -11,7 +11,7 @@ exports.onUpdateHandler = async(change, context) => {
         monthId: context.params.monthSubcollectionId,
         yearId: context.params.yearDocId
     }
-    if(!util.isValidRequest(visitPath.yearId, visitPath.monthId, after_data.date, visitPath._id)) {
+    if(!util.isRequestDateValid(visitPath.yearId, visitPath.monthId, after_data.date, visitPath._id)) {
         console.error("Received visit update for invalid date range. Skipping request:", visitPath);
         return;
     }
