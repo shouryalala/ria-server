@@ -109,6 +109,7 @@ exports.onUpdateHandler = async(change, context) => {
             console.error('Visit Cancel:: Invalid user_id/ast_id. Trashing request');
             return;
         }
+        //TODO logic based on whether a field is defined or not. Not safe. Needs to changed.
         if(after_data[util.FLD_CANCLD_BY_USER] !== undefined && !after_data[util.FLD_CANCLD_BY_USER]) {
             console.log('Assistant cancelled visit. Logging cancellation and informing user.');
             let docKey = `${visitPath.yearId}-${visitPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
@@ -172,7 +173,9 @@ exports.onUpdateHandler = async(change, context) => {
                 await batch.commit();
                 console.log('Batch cancellation commit: ');
             }catch(e) {
-                console.error('user cancellation analytics logging failed:', e);
+                console.error('user cancellation analytics+status logging failed:', e, 
+                    new Error('user cancellation failed' + e.toString()));
+                util.notifyUserRequestClosed(after_data.user_id, util.ERROR_CODE);
             }
         }
         else{

@@ -395,7 +395,7 @@ var isRequestValid = function(requestObj) {
     return true;
 }
 
-var notifyUserRequestClosed = async function(payload, code) {
+var notifyUserRequestClosed = async function(userId, code) {
     console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
 }
 
