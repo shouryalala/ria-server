@@ -420,9 +420,9 @@ var updateAssistantRating = async function(astId, oldRating, newRating) {
         let astDoc = await db.collection(COLN_ASSISTANTS).doc(astId).get();
         let ast = astDoc.data();
         let finRating = getRatingAverage(ast.rating, ast.comp_visits, newRating, oldRating);
-        let updateObj = {
-            rating: finRating
-        };
+        console.log(`CurRating: ${ast.rating}, CurCompVisits: ${ast.comp_visits}, NewAverageRating:${finRating}`);
+        let updateObj = {};
+        updateObj['rating'] = Number(finRating);            //TODO save as number        
         if(oldRating === undefined) {
             updateObj['comp_visits'] = ast.comp_visits + 1; //new visit rated
         }
@@ -472,9 +472,9 @@ var getRatingAverage = function(cur_avg, cur_total, cur_rating, old_rating) {
                 fresh_qt = cur_qt;
                 fresh_ql = (((5*cur_ql*cur_total)-old_rating+cur_rating)/(5*cur_total)).toPrecision(4);
             }
-        }
+        }        
+        let finRating = (Number(MIN_RATING) + Number(fresh_ql) + Number(fresh_qt)).toPrecision(4);         
         console.log(`Rating Calculation: CurQt = ${cur_qt}, CurQl = ${cur_ql}, CurTotal = ${cur_total}, FreshQt = ${fresh_qt}, FreshQl = ${fresh_ql}, Final Rating = ${finRating}`);
-        let finRating = (+MIN_RATING + +fresh_ql + +fresh_qt).toPrecision(4);         
         if(finRating < MIN_RATING) {
             console.error(new Error("Rating calc output incorrect"));
             finRating = MIN_RATING;
@@ -485,6 +485,7 @@ var getRatingAverage = function(cur_avg, cur_total, cur_rating, old_rating) {
         }
         return finRating;
     }catch(e) {
+        console.error("Calculation failed: " ,e, new Error('Calculation failed' + e.toString()));
         return cur_avg;
     }
 }

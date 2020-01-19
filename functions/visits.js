@@ -187,9 +187,12 @@ exports.onUpdateHandler = async(change, context) => {
     }else if(after_data.rating !== undefined && prev_data.rating !== after_data.rating) {   //can be new rating entry or update of prev rating
         console.log(`Visit rating updated: ${after_data.rating}`);
         //refresh assistant average rating
-        return util.updateAssistantRating(after_data.ass_id, prev_data.rating, after_data.rating);
+        await util.updateAssistantRating(after_data.ass_id, prev_data.rating, after_data.rating);
+        return;
     }
-    
+    else{
+        console.log(`No visit logic triggered.`);
+    }   
 
 }
 
