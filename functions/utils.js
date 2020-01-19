@@ -73,6 +73,9 @@ const dummy2 = 'acxacxsexsexsex';
 const dummy3 = 'alYssfTuB2Y1tTw5jEaQfVCxUhX2';
 const yrCodes = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
+const MIN_RATING = 3;
+const QUANT_FACTOR = 10;
+
 class DecodedTime {    
     constructor(hour, min) {
         this.hour = hour;
@@ -399,6 +402,107 @@ var notifyUserRequestClosed = async function(userId, code) {
     console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
 }
 
+/**
+ * UPDATEASSISTANTRATING
+ * @param {String} astId required
+ * @param {number} oldRating if an earlier visit is being updated, else undefined
+ * @param {number} newRating required
+ * 
+ * return boolean to confirm operation
+ */
+var updateAssistantRating = async function(astId, oldRating, newRating) {
+    console.log("UPDATEASSISTANTRATING::INVOKED");
+    if(newRating === undefined || astId === undefined) {
+        console.error("Undefined new rating/astId. Cancelling updation");
+        return false;
+    }
+    try{        
+        let astDoc = await db.collection(COLN_ASSISTANTS).doc(astId).get();
+        let ast = astDoc.data();
+        let finRating = getRatingAverage(ast.rating, ast.comp_visits, newRating, oldRating);
+        let updateObj = {
+            rating: finRating
+        };
+        if(oldRating === undefined) {
+            updateObj['comp_visits'] = ast.comp_visits + 1; //new visit rated
+        }
+        try{
+            await db.collection(COLN_ASSISTANTS).doc(astId).set(updateObj, {merge: true});
+            return true;
+        }catch(e) {
+            console.error("Error setting new assistant rating",e, new Error("Failed to set assistant doc"));
+            return false;
+        }
+    }catch(e) {
+        console.error("Error fetching assistant doc: ",e, new Error("Failed to fetch assistant doc"));
+        return false;
+    }
+}
+
+/**
+ * 
+ * @param {number} cur_avg  upto 4 decimals. current rating
+ * @param {number} cur_total completed visits
+ * @param {number} cur_rating  current visit rating
+ * @param {number} old_rating  if an earlier visit is being updated
+ * 
+ * return {number} new average rating
+ */
+var getRatingAverage = function(cur_avg, cur_total, cur_rating, old_rating) {
+    try{	
+        if(cur_rating === undefined)return MIN_RATING;
+        if(cur_avg === undefined)cur_avg = MIN_RATING;
+        if(old_rating === cur_rating) return cur_avg;        
+        let cur_qt,cur_ql,fresh_qt,fresh_ql;
+
+        if(cur_total === undefined || cur_total === 0){
+            //first visit
+            cur_qt = getQuantityDatum(1);
+            cur_ql = cur_rating/5;
+            fresh_qt = cur_qt;
+            fresh_ql = cur_ql;
+        }else{
+            cur_qt = getQuantityDatum(cur_total);    
+            cur_ql = Math.max(cur_avg - MIN_RATING - cur_qt,0);    
+            if(old_rating === undefined){
+                cur_total++;
+                fresh_qt = getQuantityDatum(cur_total);
+                fresh_ql = ((5*cur_ql*(cur_total-1) + cur_rating)/(5*cur_total)).toPrecision(4); //simple average                
+            }else{
+                fresh_qt = cur_qt;
+                fresh_ql = (((5*cur_ql*cur_total)-old_rating+cur_rating)/(5*cur_total)).toPrecision(4);
+            }
+        }
+        console.log(`Rating Calculation: CurQt = ${cur_qt}, CurQl = ${cur_ql}, CurTotal = ${cur_total}, FreshQt = ${fresh_qt}, FreshQl = ${fresh_ql}, Final Rating = ${finRating}`);
+        let finRating = (+MIN_RATING + +fresh_ql + +fresh_qt).toPrecision(4);         
+        if(finRating < MIN_RATING) {
+            console.error(new Error("Rating calc output incorrect"));
+            finRating = MIN_RATING;
+        }
+        if(finRating > 5) {
+            console.error(new Error("Rating calc output incorrect"));
+            finRating = cur_avg;
+        }
+        return finRating;
+    }catch(e) {
+        return cur_avg;
+    }
+}
+
+var getQuantityDatum = function(qty) {
+    let QUANT_FACTOR = 10;
+    try{
+        if(!qty.isNaN) {
+            let fraction = (-1*qty)/QUANT_FACTOR;
+            return (1-Math.exp(fraction)).toPrecision(4);
+        }
+    }catch(e){
+        console.error("GetQuantityDatum Failed", qty);
+        return 0;
+    }
+    return 0;
+}
+
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COLN_REQUESTS,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
     SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
@@ -406,5 +510,5 @@ module.exports = {
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,
-    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed    
+    getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed,updateAssistantRating    
 }
