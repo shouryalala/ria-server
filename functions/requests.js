@@ -70,6 +70,7 @@ exports.onUpdateHandler = async (change, context) => {
             user_mobile: after_data.user_mobile.trim(),
             ass_id: after_data.asn_id.trim(),
             date: after_data.date,
+            cost: after_data.cost,
             service: after_data.service,
             address: after_data.address,
             society_id: after_data.society_id.trim(),

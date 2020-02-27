@@ -97,7 +97,7 @@ exports.onUpdateHandler = async(change, context) => {
                         user_id: after_data.user_id,    //shouldnt be required
                     }
                 };
-            let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_VISIT_ONGOING);
+            let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_VISIT_COMPLETED);
             console.log("Assitant analytics updated: ", anPromise, " User Activity updated: ", userActivityPromise, " Payload sent to user: ", sendPayloadFlag);
 
         }
@@ -109,14 +109,14 @@ exports.onUpdateHandler = async(change, context) => {
             if(visitAst === undefined || visitUser === undefined) {
                 console.error('Visit Cancel:: Invalid user_id/ast_id. Trashing request');
                 return;
-            }
-            //TODO logic based on whether a field is defined or not. Not safe. Needs to changed.
-            if(after_data[util.FLD_CANCLD_BY_USER] !== undefined && !after_data[util.FLD_CANCLD_BY_USER]) {
+            }            
+            if(prev_data[util.FLD_CANCLD_BY_AST] === undefined && after_data[util.FLD_CANCLD_BY_AST] !== undefined
+                 && after_data[util.FLD_CANCLD_BY_AST]) {
                 console.log('Assistant cancelled visit. Logging cancellation and informing user.');
                 let docKey = `${visitPath.yearId}-${visitPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
                 let batch = db.batch();
                 let astCancRef = db.collection(util.COLN_ASSISTANTS).doc(visitAst).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey); //.set(vPayload,{merge:true});
-                let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);//.set(userStatusObj);
+                let userActivityRef = db.collection(util.COLN_USERS).doc(visitUser).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);//.set(userStatusObj);
                 let vPayload = {
                     cancels: fieldValue.arrayUnion(visitPath._id)
                 };                     
@@ -154,12 +154,13 @@ exports.onUpdateHandler = async(change, context) => {
                     return;
                 }              
             }
-            else if(after_data[util.FLD_CANCLD_BY_USER] !== undefined && after_data[util.FLD_CANCLD_BY_USER])  {
+            else if(prev_data[util.FLD_CANCLD_BY_USER] === undefined && after_data[util.FLD_CANCLD_BY_USER] !== undefined
+                 && after_data[util.FLD_CANCLD_BY_USER])  {
                 console.log('User cancelled the visit. Logging cancellation');
                 let batch = db.batch();
                 let docKey = `${visitPath.yearId}-${visitPath.monthId}-CNCLD`;  //ex: 2019-DEC-CNCLD   
-                let userCancRef = db.collection(util.COLN_USERS).doc(visitAst).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey); //.set(vPayload,{merge:true});
-                let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);            
+                let userCancRef = db.collection(util.COLN_USERS).doc(visitUser).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey); //.set(vPayload,{merge:true});
+                let userActivityRef = db.collection(util.COLN_USERS).doc(visitUser).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);            
                 let vPayload = {
                     cancels: fieldValue.arrayUnion(visitPath._id)
                 };
@@ -189,7 +190,7 @@ exports.onUpdateHandler = async(change, context) => {
         //refresh assistant average rating
         await util.updateAssistantRating(after_data.ass_id, prev_data.rating, after_data.rating);
         return;
-    }
+    }    
     else{
         console.log(`No visit logic triggered.`);
     }   
