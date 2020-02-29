@@ -36,7 +36,8 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     let st_time_obj = util.decodeHourMinFromTime(st_time);   //p
     let en_time_obj = util.decodeHourMinFromTime(en_time);     
 
-    let st_time_buffer_obj = util.decodeHourMinFromTime(st_time - util.BUFFER_TIME);
+    //let st_time_buffer_obj = util.decodeHourMinFromTime(st_time - util.BUFFER_TIME);
+    let st_time_buffer_obj = util.decodeHourMinFromTime(st_time);   //dont look before requested time
     let en_time_buffer_obj = util.decodeHourMinFromTime(en_time + util.BUFFER_TIME);
 
     console.log("Decoded Time: Start: " + st_time_obj.toString() + " End: " + en_time_obj.toString());
@@ -59,13 +60,15 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     }
 
     const num_slots = (en_time_obj.getHours() - st_time_obj.getHours())*util.TOTAL_SLOTS + (en_time_obj.getSlot() - st_time_obj.getSlot());
+    //p = 0 now
     let p = (st_time_obj.getHours() - st_time_buffer_obj.getHours())*util.TOTAL_SLOTS + (st_time_obj.getSlot() - st_time_buffer_obj.getSlot());
     console.log("Num_slots required: " + num_slots + ", P: " + p);
     let k_right = p;
-    let k_left = p-1;        
+    //let k_left = p-1;        
     let flag = false;
     let rObj = null;
-    while((k_right+num_slots) <= res.slotLib.length || (k_left >= 0)) {
+    //while((k_right+num_slots) <= res.slotLib.length || (k_left >= 0)) {
+    while((k_right+num_slots) <= res.slotLib.length) {
         let tAssistantId;            
         if((k_right + num_slots) <= res.slotLib.length) {
             tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_right,num_slots);
@@ -89,28 +92,28 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
             //move k forward
             k_right++;
         }
-        if(k_left >= 0) {
-            tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_left,num_slots);
-            if(tAssistantId !== null) {                    
-                console.log("Found free assistant: " + tAssistantId + " in window: " + k_left);
-                console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
-                //console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
-                flag = true;
-                //put all slots in a block to return
-                let slotBlock = [];
-                for(let i=k_left; i<k_left+num_slots; i++) {
-                    slotBlock.push(res.slotLib[i]); 
-                }
-                rObj = {
-                    _id: tAssistantId,
-                    //clientToken: res.assistantTokenLib[tAssistantId],
-                    freeSlotLib: slotBlock
-                }
-                break;
-            }
-            //move k backward
-            k_left--;
-        }
+        // if(k_left >= 0) {
+        //     tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_left,num_slots);
+        //     if(tAssistantId !== null) {                    
+        //         console.log("Found free assistant: " + tAssistantId + " in window: " + k_left);
+        //         console.log("Slot: " + k_left + ", Decoded:: (" + res.slotLib[k_left].getHours() + "," +  res.slotLib[k_left].getMins() + ")");
+        //         //console.log("Assistant: " + tAssistantId + ", Client token: " + res.assistantTokenLib[tAssistantId]);
+        //         flag = true;
+        //         //put all slots in a block to return
+        //         let slotBlock = [];
+        //         for(let i=k_left; i<k_left+num_slots; i++) {
+        //             slotBlock.push(res.slotLib[i]); 
+        //         }
+        //         rObj = {
+        //             _id: tAssistantId,
+        //             //clientToken: res.assistantTokenLib[tAssistantId],
+        //             freeSlotLib: slotBlock
+        //         }
+        //         break;
+        //     }
+        //     //move k backward
+        //     k_left--;
+        // }
     }
     return rObj; 
 }

@@ -28,6 +28,7 @@ const SUBCOLN_USER_FCM = "fcm";
 const SUBCOLN_USER_ACTIVITY = "activity";
 const DOC_USER_FCM_TOKEN = "client_token";
 const DOC_ACTIVITY_STATUS = "status";
+const DOC_USER_STATS = "statistics";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -42,6 +43,12 @@ const COMMAND_REQUEST_CONFIRMED = "RQDP";
 const COMMAND_VISIT_ONGOING = "VISON";
 const COMMAND_VISIT_COMPLETED = "VISCOM";
 const COMMAND_VISIT_CANCELLED = "VISCAN";
+const COMMAND_MISC_MESSAGE = "MISC";    //miscellaneous
+//Miscellaneous messages type -- condes sent to userClient alongwith command
+const NO_AVAILABLE_AST_MSG = "NoAvailableAst";
+const ERROR_ENCOUNTERED_MSG = "ErrorMsg";
+
+
 //Service decodes
 const SERVICE_CLEANING = "Cx";
 const SERVICE_DUSTING = "Dx";
@@ -67,7 +74,7 @@ const SUCCESS_CODE = 1;
 const FLD_CANCLD_BY_USER = "cncld_by_user";
 const FLD_CANCLD_BY_AST = "cncld_by_ast";
 const TOTAL_SLOTS = 6;
-const BUFFER_TIME = 1200;
+const BUFFER_TIME = 1800;
 const ALPHA_ZONE_ID = 'z23';
 const REQUEST_STATUS_CHECK_TIMEOUT = 90000  //90 seconds
 const dummy1 = 'bhenbhaibhenbhai';
@@ -402,6 +409,47 @@ var isRequestValid = function(requestObj) {
 
 var notifyUserRequestClosed = async function(userId, code) {
     console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
+    let payload = {};
+    switch(code) {
+        case NO_AVAILABLE_AST_CODE: {
+            payload = {
+                notification: {
+                    title: 'No assistant available',
+                    body: 'Please try again in a while'
+                },
+                data: {
+                    msg_type: NO_AVAILABLE_AST_MSG,
+                }
+            };            
+            break;
+        }
+        case ERROR_CODE: {
+            payload = {
+                notification: {
+                    title: 'An Error Occured',
+                    body: 'Please try again in a while'
+                },
+                data: {
+                    msg_type: ERROR_ENCOUNTERED_MSG,
+                }
+            }
+            break;
+        }
+        default: {
+            payload = {
+                // notification: {
+                //     title: '',
+                //     body: 'Please try again in a while'
+                // },
+                data: {
+                    msg_type: String(code),
+                }
+            }
+            break;
+        }
+    }
+    let sendPayloadFlag = await sendUserPayload(userId, payload, COMMAND_MISC_MESSAGE);
+    console.log('Sending Payload to User: ', payload, sendPayloadFlag);
 }
 
 /**
@@ -508,7 +556,7 @@ var getQuantityDatum = function(qty) {
 
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COLN_REQUESTS,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
-    SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
+    SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,DOC_USER_STATS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_COMPLETED,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,
     SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,
