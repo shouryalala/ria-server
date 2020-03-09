@@ -213,13 +213,19 @@ var onVisitCompleted = async function(visitObj, visitPath){
     }    
 
     //2. ADD TOTAL MINS UP AND ADD TO BATCH
-    if(visitObj.act_en_time !== undefined && visitObj.act_en_time !== undefined) {
+    if(visitObj.act_st_time !== undefined && visitObj.act_en_time !== undefined) {
         let totalVisitTime = visitObj.act_en_time - visitObj.act_st_time;        
         let userStatsRef = db.collection(util.COLN_USERS).doc(visitObj.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_USER_STATS);
         try{
-            let currUserStats = (await userStatsRef.get()).data();
-            userLifetimeMins = (currUserStats.total_mins === undefined)?totalVisitTime:currUserStats.totalMins+totalVisitTime;
-            userCompletedVisits = (currUserStats.comp_visits === undefined)?1:currUserStats.comp_visits+1;
+            let currUserStatsSnapShot = await userStatsRef.get();
+            if(currUserStatsSnapShot === undefined) {
+                userLifetimeMins = totalVisitTime;
+                userCompletedVisits = 1;    
+            }else{
+                let currUserStats = currUserStatsSnapShot.data();
+                userLifetimeMins = (currUserStats.total_mins === undefined)?totalVisitTime:currUserStats.totalMins+totalVisitTime;
+                userCompletedVisits = (currUserStats.comp_visits === undefined)?1:currUserStats.comp_visits+1;
+            }            
         }catch(e){
             console.error('Error while fetching user stats: ', e.toString(), new Error('UserStatistics doc read failed: ' + e.toString()));
         }
@@ -237,7 +243,8 @@ var onVisitCompleted = async function(visitObj, visitPath){
         console.error('Visit Object didnt have cost included!',visitPath, new Error('Visit object missing cost: ', visitPath));
     }else{
         let timestamp = Date.now()  // not using firestore timestamp in this case
-        let financeDocRef = db.collection(util.COLN_ASSISTANTS).doc(util.visitObj.ass_id)
+        console.log(`Timestamp for finance addition: ${timestamp}`);
+        let financeDocRef = db.collection(util.COLN_ASSISTANTS).doc(visitObj.ass_id)
             .collection(util.SUBCOLN_ASSISTANT_FINANCE).doc(`${visitPath.yearId}-${visitPath.monthId}`);
         let costObj = {};
         costObj[timestamp.toString()] = {

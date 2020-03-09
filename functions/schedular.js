@@ -166,6 +166,10 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         });
         console.log("Remaining assistants after removing exceptions: ", assistants);
     }
+    if(assistants.length === 0) {
+        console.log("No assistants available for service after filtering.");
+        return util.NO_AVAILABLE_AST_CODE;
+    }
     let query = db.collection(util.COLN_TIMETABLE).doc(docId).collection(monthId);    
     if(st_time_dec.getHours() === en_time_dec.getHours()) {
         console.log("Query Type: Querying through one doc: " + st_time_dec.getHours());            
