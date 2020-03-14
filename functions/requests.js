@@ -195,17 +195,13 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
         console.error("Function getAvailableAssistant Failed.",e, new Error("getAvailableAssistant failed: " + e.toString()));
         return util.ERROR_CODE;
     }
-    //ensure received result is not empty and not invalid TODO code neatness required
-    if(astSlotDetails === null || astSlotDetails === util.ERROR_CODE || astSlotDetails === util.NO_AVAILABLE_AST_CODE || 
-        astSlotDetails._id === undefined || astSlotDetails.freeSlotLib === undefined) {
-        if(astSlotDetails === schedular.NO_AST_AVLBLE_CODE) {            
-            console.log("No available maids at the moment.");        
-            return util.NO_AVAILABLE_AST_CODE;
-        }
-        else{
-            console.error("Function getAvailableAssistant Failed.");
-            return util.ERROR_CODE;
-        }
+    //ensure received result is not empty and not invalid
+    if(astSlotDetails === undefined || astSlotDetails === null || astSlotDetails === util.ERROR_CODE) {
+        console.error("Function getAvailableAssistant Failed.");
+        return util.ERROR_CODE;
+    }else if(astSlotDetails === util.NO_AVAILABLE_AST_CODE || astSlotDetails._id === undefined || astSlotDetails.freeSlotLib === undefined) {
+        console.log("No applicable assistant found for request: ", requestPath._id);        
+        return util.NO_AVAILABLE_AST_CODE;
     }
 
     console.log("Assistant details:: Id:",astSlotDetails._id," Booking assitant schedule: ", astSlotDetails.freeSlotLib);
@@ -218,55 +214,54 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             new Error("BookAssistantSlot method failed: " + e.toString()));
         return util.ERROR_CODE;
     }    
-    
-    if(bookingFlag === 1) {
-        const payload = {
-            data: {
-                rId: requestPath._id,
-                service: requestObj.service,                            
-                date: String(requestObj.date),                            
-                time: String(astSlotDetails.freeSlotLib[0].encode()),      //cant send number
-                address: requestObj.address,
-                socId: requestObj.society_id,
-                //Command: COMMAND_WORK_REQUEST
-            }
-        };
 
-        try{
-            let response = await util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST);
-            if(response === util.SUCCESS_CODE) {
-                console.log("Updating the snapshot's assignee.");
-                let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
-                try{
-                    await pathRef.set({
-                        asn_id: astSlotDetails._id,
-                        asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
-                        slotRef: slotRef
-                    }, {merge: true});
-
-                    setTimeout(() => {
-                        console.log("Invoking routine Request status check for requestId: " + requestPath._id);
-                        checkRequestStatus(requestPath, astSlotDetails._id);
-                    }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
-                    return util.SUCCESS_CODE;
-                }catch(e) {
-                    console.error("Updating assistant snapshot to assigned: Failed", e);
-                    return util.ERROR_CODE;
-                }                
-            }else{
-                console.error("Failed to send request to assistant. redirect request and log problem");
-                //TODO
-                return util.ERROR_CODE;
-            }
-        }catch(e) {
-            console.error("Sending Assistant Payload failed",e, 
-                new Error("sendAssistantPayload method failed: " + e.toString()));
-        }
-    }
-    else{
+    if(bookingFlag !== 1) {
         console.error("Booking failed. Inform user to try again", slotRef);     
         return util.ERROR_CODE;
-    }   
+    }
+
+    const payload = {
+        data: {
+            rId: requestPath._id,
+            service: requestObj.service,                            
+            date: String(requestObj.date),                            
+            time: String(astSlotDetails.freeSlotLib[0].encode()),      //cant send number
+            address: requestObj.address,
+            socId: requestObj.society_id,
+            //Command: COMMAND_WORK_REQUEST
+        }
+    };
+
+    try{
+        let response = await util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST);
+        if(response === util.SUCCESS_CODE) {
+            console.log("Updating the snapshot's assignee.");
+            let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
+            try{
+                await pathRef.set({
+                    asn_id: astSlotDetails._id,
+                    asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
+                    slotRef: slotRef
+                }, {merge: true});
+
+                setTimeout(() => {
+                    console.log("Invoking routine Request status check for requestId: " + requestPath._id);
+                    checkRequestStatus(requestPath, astSlotDetails._id);
+                }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
+                return util.SUCCESS_CODE;
+            }catch(e) {
+                console.error("Updating assistant snapshot to assigned: Failed", e);
+                return util.ERROR_CODE;
+            }                
+        }else{
+            console.error("Failed to send request to assistant.", 
+            new Error("Failed to send paylad to Assistant",payload,astSlotDetails._id));
+            return util.ERROR_CODE;
+        }
+    }catch(e) {
+        console.error("Sending Assistant Payload failed",e, 
+            new Error("sendAssistantPayload method failed: ",e.toString(),payload,astSlotDetails._id));
+    }    
 }
 
 /**

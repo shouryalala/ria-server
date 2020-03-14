@@ -15,6 +15,7 @@ const COLN_SOCIETIES = "societies";
 const SUBCOLN_ASSISTANT_ANALYTICS = "analytics";
 const SUBCOLN_ASSISTANT_FCM = "fcm";
 const SUBCOLN_ASSITANT_FEEDBK = "feedback";
+const SUBCOLN_ASSISTANT_FINANCE = "finance";
 const DOC_ASSISTANT_FCM_TOKEN = "client_token";
 //society subcoln
 const SUBCOLN_SOC_ASTS = "assistants";
@@ -28,6 +29,7 @@ const SUBCOLN_USER_FCM = "fcm";
 const SUBCOLN_USER_ACTIVITY = "activity";
 const DOC_USER_FCM_TOKEN = "client_token";
 const DOC_ACTIVITY_STATUS = "status";
+const DOC_USER_STATS = "statistics";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -42,12 +44,21 @@ const COMMAND_REQUEST_CONFIRMED = "RQDP";
 const COMMAND_VISIT_ONGOING = "VISON";
 const COMMAND_VISIT_COMPLETED = "VISCOM";
 const COMMAND_VISIT_CANCELLED = "VISCAN";
+const COMMAND_MISC_MESSAGE = "MISC";    //miscellaneous
+//Miscellaneous messages type -- condes sent to userClient alongwith command
+const NO_AVAILABLE_AST_MSG = "NoAvailableAst";
+const ERROR_ENCOUNTERED_MSG = "ErrorMsg";
+
+
 //Service decodes
 const SERVICE_CLEANING = "Cx";
 const SERVICE_DUSTING = "Dx";
 const SERVICE_UTENSILS = "Ux";
-const SERVICE_CHORE = "Chx";
+const SERVICE_CLEANING_DUSTING = "CDx";
 const SERVICE_CLEANING_UTENSILS = "CUx";
+const SERVICE_DUSTING_UTENSILS = "DUx";
+const SERVICE_CLEANING_DUSTING_UTENSILS = "CDUx";
+const SERVICE_CHORE = "Chx";
 //Service Durations
 const SERVICE_CLEANING_DURATION = 1800;
 const SERVICE_UTENSILS_DURATION = 900;
@@ -67,7 +78,7 @@ const SUCCESS_CODE = 1;
 const FLD_CANCLD_BY_USER = "cncld_by_user";
 const FLD_CANCLD_BY_AST = "cncld_by_ast";
 const TOTAL_SLOTS = 6;
-const BUFFER_TIME = 1200;
+const BUFFER_TIME = 1800;
 const ALPHA_ZONE_ID = 'z23';
 const REQUEST_STATUS_CHECK_TIMEOUT = 90000  //90 seconds
 const dummy1 = 'bhenbhaibhenbhai';
@@ -395,13 +406,68 @@ var isRequestDateValid = function(yearId, monthId, date, pId) {
     return (tDate.getFullYear().toString() === yearId.trim() && yrCodes[tDate.getMonth()] === monthId.trim() && tDate.getDate() === date);
 }
 
+/**
+ * ISREQUESTVALID
+ * @param {Request} requestObj 
+ * 
+ * check request core fields availability
+ */
 var isRequestValid = function(requestObj) {
     console.log("ISREQUESTVALID::INVOKED");
-    return true;
+    if (requestObj.service === undefined 
+        || requestObj.date === undefined 
+        || requestObj.user_id === undefined 
+        || requestObj.society_id === undefined
+        || requestObj.req_time === undefined) {
+            console.error("Undefined essential Request fields: ", requestObj, " skipping request");
+            return false;
+        }
+        return true;    
 }
 
 var notifyUserRequestClosed = async function(userId, code) {
     console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
+    let payload = {};
+    switch(code) {
+        case NO_AVAILABLE_AST_CODE: {
+            payload = {
+                notification: {
+                    title: 'No assistant available',
+                    body: 'Please try again in a while'
+                },
+                data: {
+                    msg_type: NO_AVAILABLE_AST_MSG,
+                }
+            };            
+            break;
+        }
+        case ERROR_CODE: {
+            payload = {
+                notification: {
+                    title: 'An Error Occured',
+                    body: 'Please try again in a while'
+                },
+                data: {
+                    msg_type: ERROR_ENCOUNTERED_MSG,
+                }
+            }
+            break;
+        }
+        default: {
+            payload = {
+                // notification: {
+                //     title: '',
+                //     body: 'Please try again in a while'
+                // },
+                data: {
+                    msg_type: String(code),
+                }
+            }
+            break;
+        }
+    }
+    let sendPayloadFlag = await sendUserPayload(userId, payload, COMMAND_MISC_MESSAGE);
+    console.log('Sending Payload to User: ', payload, sendPayloadFlag);
 }
 
 /**
@@ -508,11 +574,11 @@ var getQuantityDatum = function(qty) {
 
 module.exports = {
     COLN_USERS,COLN_ASSISTANTS,COLN_REQUESTS,COLN_VISITS,COLN_TIMETABLE,COLN_SOCIETIES,COLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_ANALYTICS,SUBCOLN_ASSISTANT_FCM,
-    SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,
+    SUBCOLN_ASSITANT_FEEDBK,DOC_ASSISTANT_FCM_TOKEN,SUBCOLN_SOC_ASTS,DOC_SOC_AST_SERVICING,SUBCOLN_USER_FCM,SUBCOLN_USER_ACTIVITY,SUBCOLN_ASSISTANT_FINANCE,DOC_USER_FCM_TOKEN,DOC_ACTIVITY_STATUS,DOC_USER_STATS,
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,
     COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_COMPLETED,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,
-    SERVICE_CLEANING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,
-    TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,
-    sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,
-    ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed,updateAssistantRating    
+    SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,
+    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
+    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,
+    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed,updateAssistantRating    
 }
