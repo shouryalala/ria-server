@@ -31,7 +31,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     console.log("Debug:: Today: " + today.getDate());
     if(date < today.getDate()){
         console.error("Received a request for a date in the past.");
-        //TODO return 0;
+        return util.ERROR_CODE;
     }
     let st_time_obj = util.decodeHourMinFromTime(st_time);   //p
     let en_time_obj = util.decodeHourMinFromTime(en_time);     
@@ -45,17 +45,15 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     //var slots = getSlotCount(st_hour, en_hour, st_min, en_min);
 
     //make sure start times are not before current time
-    if(date === today.getDate()) {
+
+    //if(date === today.getDate()) {    //not required
         console.log("Verifying time slots")//TODO
         st_time_obj = util.verifyTime(st_time_obj,today.getHours(), today.getMinutes());
         st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
-    }    
+    //}    
     let res = await getTimetable(society_id, util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant);
-    if(res === util.ERROR_CODE) {
-        console.error("Received an error from getTimetable. Exiting method");
-        return res;
-    }else if(res === util.NO_AVAILABLE_AST_CODE) {
-        console.log("No assistant found after search.");
+    if(res === util.ERROR_CODE || res === util.NO_AVAILABLE_AST_CODE) {
+        console.log("Received an ERROR/NO_AST code from getTimetable. Exiting method");
         return res;
     }
 
@@ -92,6 +90,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
             //move k forward
             k_right++;
         }
+        //ONLY GO FORWARD NOT BACKWARD -- thus commenting below
         // if(k_left >= 0) {
         //     tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_left,num_slots);
         //     if(tAssistantId !== null) {                    
@@ -114,6 +113,10 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
         //     //move k backward
         //     k_left--;
         // }
+    }
+    if(!flag){
+        console.log("No free assistant found from sliding window implementation: ",res.slotLib);
+        return util.NO_AVAILABLE_AST_CODE;
     }
     return rObj; 
 }
@@ -144,7 +147,7 @@ let getTimetable = async function(societyId, docId, monthId, date, st_time_dec, 
         + ")\tMax: (Doc ID: " + max_doc_id + ", Slot ID: " + max_slot_id + ")");
 
     let assistants = await getCurrentlyAvailableAsts(societyId);    
-    if(assistants === null || assistants.length === 0)return util.NO_AVAILABLE_AST_CODE;
+    if(assistants === null || assistants === undefined || assistants.length === 0)return util.NO_AVAILABLE_AST_CODE;
     console.log('Fetched Assistant list: ', assistants);
     
     if(forceAssistant !== null && forceAssistant !== undefined) {  

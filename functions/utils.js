@@ -406,9 +406,23 @@ var isRequestDateValid = function(yearId, monthId, date, pId) {
     return (tDate.getFullYear().toString() === yearId.trim() && yrCodes[tDate.getMonth()] === monthId.trim() && tDate.getDate() === date);
 }
 
+/**
+ * ISREQUESTVALID
+ * @param {Request} requestObj 
+ * 
+ * check request core fields availability
+ */
 var isRequestValid = function(requestObj) {
     console.log("ISREQUESTVALID::INVOKED");
-    return true;
+    if (requestObj.service === undefined 
+        || requestObj.date === undefined 
+        || requestObj.user_id === undefined 
+        || requestObj.society_id === undefined
+        || requestObj.req_time === undefined) {
+            console.error("Undefined essential Request fields: ", requestObj, " skipping request");
+            return false;
+        }
+        return true;    
 }
 
 var notifyUserRequestClosed = async function(userId, code) {
