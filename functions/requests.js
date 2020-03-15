@@ -33,7 +33,7 @@ exports.onCreateHandler =  async (snap, context) => {
 
     if(flag === util.ERROR_CODE || flag === util.NO_AVAILABLE_AST_CODE) {
         //provide closure to user's request
-        await util.notifyUserRequestClosed(requestObj.user_id, flag);
+        await util.closeUserRequest(requestObj.user_id, flag);
     }
     return flag;
 }        
@@ -160,7 +160,7 @@ exports.onUpdateHandler = async (change, context) => {
 
         if(flag === util.ERROR_CODE || flag === util.NO_AVAILABLE_AST_CODE) {
             //provide closure to user's request
-            await util.notifyUserRequestClosed(after_data.user_id, flag);
+            await util.closeUserRequest(after_data.user_id, flag);
         }
         return flag;        
     }
@@ -323,7 +323,7 @@ var checkRequestStatus = async function(requestPath, assId) {
                 }
 
                 if(flag === util.ERROR_CODE || flag === util.NO_AVAILABLE_AST_CODE) {
-                    await util.notifyUserRequestClosed(aDoc.user_id, flag);
+                    await util.closeUserRequest(aDoc.user_id, flag);
                 }
                 return flag;
             }

@@ -139,7 +139,7 @@ exports.onUpdateHandler = async(change, context) => {
                 }catch(e) {
                     console.error('user cancellation analytics+status logging failed:', e, 
                         new Error('user cancellation failed' + e.toString()));
-                    util.notifyUserRequestClosed(after_data.user_id, util.ERROR_CODE);
+                    //util.closeUserRequest(after_data.user_id, util.ERROR_CODE);
                 }
             }
             else{

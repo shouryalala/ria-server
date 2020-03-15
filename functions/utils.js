@@ -1,4 +1,4 @@
-const { db, messaging } = require('./admin');
+const { db, messaging, fieldValue } = require('./admin');
 /**
  * @ALWAYS UPDATE EXPORTS AFTER ADDING/DELETING OBJECTS!
  */
@@ -69,6 +69,7 @@ const VISIT_STATUS_COMPLETED = 1;
 const VISIT_STATUS_ONGOING = 2;
 const VISIT_STATUS_UPCOMING = 3;
 const VISIT_STATUS_NONE = 4;    //no service booked
+const VISIT_STATUS_SEARCHING = 5;
 //
 //Return Codes:
 const NO_AVAILABLE_AST_CODE = 2;
@@ -425,49 +426,84 @@ var isRequestValid = function(requestObj) {
         return true;    
 }
 
-var notifyUserRequestClosed = async function(userId, code) {
-    console.log("NOTIFYUSERREQUESTCLOSED::INVOKED");
-    let payload = {};
-    switch(code) {
-        case NO_AVAILABLE_AST_CODE: {
+/**
+ * CLOSEUSERREQUEST
+ * @param {String} userId 
+ * @param {flag} code 
+ * 
+ * Defaults visit status if in 'Searching' or 'Cancelled'
+ * - Open transaction -- check if status in searching.cancelled
+ * - if yes, change to default
+ * - notify user
+ */
+var closeUserRequest = async function(userId, code) {
+    console.log("CLOSEUSERREQUEST::INVOKED");
+    if(userId === undefined || code === undefined) {
+        console.error('Parameted undefined..skipping');
+        return;
+    }
+    let userStatusRef = db.collection(COLN_USERS).doc(userId).collection(SUBCOLN_USER_ACTIVITY).doc(DOC_ACTIVITY_STATUS);
+    db.runTransaction(async transaction => {
+        let statusFlag = false;
+        try{
+            let userStatusSnapshot = await transaction.get(userStatusRef);
+            if(userStatusSnapshot !== undefined && userStatusSnapshot.exists) {
+                let statusData = userStatusSnapshot.data();
+                if(statusData['visit_status'] !== undefined 
+                && (statusData['visit_status'] === VISIT_STATUS_SEARCHING || statusData['visit_status'] === VISIT_STATUS_CANCELLED)) {
+                    console.log('Visit status currently in seraching/cancelled. Requires update');
+                    statusFlag = true;
+                }
+            }
+        }catch(error) {
+            console.error('User status fetch: Transaction read failed', error.toString());
+        }
+        if(!statusFlag) {
+            return Promise.reject(new Error('Request was not in Searching/cancelled'));
+        }
+        //statusFlag = true. Update status
+        let uPayload = {
+            visit_status: VISIT_STATUS_NONE,
+            modified_time: fieldValue.serverTimestamp()
+        };
+        console.log('Transaction write: Setting user status to Default');
+        await transaction.set(userStatusRef, uPayload, {merge: false});
+        return Promise.resolve('User status updated successfully');
+    }).then(result => {
+        console.log("Transaction success: ", result);
+        let payload = {};
+        if(code === NO_AVAILABLE_AST_CODE) {
             payload = {
                 notification: {
                     title: 'No assistant available',
                     body: 'Please try again in a while'
                 },
                 data: {
+                    status: String(VISIT_STATUS_NONE),
                     msg_type: NO_AVAILABLE_AST_MSG,
                 }
             };            
-            break;
-        }
-        case ERROR_CODE: {
+        }else{  //ERROR_CODE or any other
             payload = {
                 notification: {
                     title: 'An Error Occured',
                     body: 'Please try again in a while'
                 },
                 data: {
+                    status: String(VISIT_STATUS_NONE),
                     msg_type: ERROR_ENCOUNTERED_MSG,
                 }
             }
-            break;
-        }
-        default: {
-            payload = {
-                // notification: {
-                //     title: '',
-                //     body: 'Please try again in a while'
-                // },
-                data: {
-                    msg_type: String(code),
-                }
-            }
-            break;
-        }
-    }
-    let sendPayloadFlag = await sendUserPayload(userId, payload, COMMAND_MISC_MESSAGE);
-    console.log('Sending Payload to User: ', payload, sendPayloadFlag);
+        }        
+        let sendPayloadFlag = await sendUserPayload(userId, payload, COMMAND_MISC_MESSAGE);
+        console.log('Sending Payload to User: ', payload, sendPayloadFlag);
+        return 1;
+    }).catch(error => {
+        console.error("Transaction error: ", error, 'User status not updated and user not notified');
+        return 0;
+    });
+
+    
 }
 
 /**
@@ -580,5 +616,5 @@ module.exports = {
     SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,
-    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,notifyUserRequestClosed,updateAssistantRating    
+    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating    
 }
