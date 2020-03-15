@@ -215,10 +215,10 @@ var onVisitCompleted = async function(visitObj, visitPath){
     //2. ADD TOTAL MINS UP AND ADD TO BATCH
     if(visitObj.act_st_time !== undefined && visitObj.act_en_time !== undefined) {
         let totalVisitTime = visitObj.act_en_time - visitObj.act_st_time;        
-        let userStatsRef = db.collection(util.COLN_USERS).doc(visitObj.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_USER_STATS);
+        let userStatsRef = db.collection(util.COLN_USERS).doc(visitObj.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_USER_STATS);        
         try{
             let currUserStatsSnapShot = await userStatsRef.get();
-            if(currUserStatsSnapShot === undefined) {
+            if(currUserStatsSnapShot === undefined || !currUserStatsSnapShot.exists) {
                 userLifetimeMins = totalVisitTime;
                 userCompletedVisits = 1;    
             }else{
@@ -226,6 +226,8 @@ var onVisitCompleted = async function(visitObj, visitPath){
                 userLifetimeMins = (currUserStats.total_mins === undefined)?totalVisitTime:currUserStats.totalMins+totalVisitTime;
                 userCompletedVisits = (currUserStats.comp_visits === undefined)?1:currUserStats.comp_visits+1;
             }            
+            console.log('Current visit total time: ', totalVisitTime, 'Recevied snapshot: ', currUserStatsSnapShot, 
+                    ', UserLifetime mins & comp visits: ', userLifetimeMins, userCompletedVisits);
         }catch(e){
             console.error('Error while fetching user stats: ', e.toString(), new Error('UserStatistics doc read failed: ' + e.toString()));
         }
