@@ -221,6 +221,11 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     }
 
     const payload = {
+        notification: {
+            title: 'New Work Request1',
+            body: 'Click to confirm',
+        //    click_action: 'launch_request'
+        },
         data: {
             rId: requestPath._id,
             service: requestObj.service,                            
@@ -229,7 +234,17 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             address: requestObj.address,
             socId: requestObj.society_id,
             //Command: COMMAND_WORK_REQUEST
-        }
+        },
+        android:{
+            priority:'high',
+            ttl:6000,
+            notification:{
+                click_action:'.NotificationActivity',
+                sound: 'nangs.mp3'
+            }
+        },
+
+      
     };
 
     try{

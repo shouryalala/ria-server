@@ -285,8 +285,8 @@ var onVisitCompleted = async function(visitObj, visitPath){
             }        
         };
         if(userCompletedVisits !== null && userLifetimeMins !== null) {
-            payload['data']['total_mins'] = userLifetimeMins;
-            payload['data']['comp_visits'] = userCompletedVisits;
+            payload['data']['total_mins'] = String(userLifetimeMins);
+            payload['data']['comp_visits'] = String(userCompletedVisits);
         }
         let sendPayloadFlag = await util.sendUserPayload(visitObj.user_id, payload, util.COMMAND_VISIT_COMPLETED);
         console.log("Payload sent to user: ",payload, sendPayloadFlag);

@@ -318,7 +318,9 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
             }
             console.log("Payload being sent: ", payload);
             try{                
-                let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                //let fcmResponse = await messaging.sendToDevice(tokenData.token, payload);
+                payload['token'] = tokenData.token;
+                let fcmResponse = await messaging.send(payload);
                 console.log("Payload sent successully:: Token:", tokenData.token, " Payload:", payload, fcmResponse);
                 return SUCCESS_CODE;
             }catch(error) {
@@ -469,7 +471,7 @@ var closeUserRequest = async function(userId, code) {
         console.log('Transaction write: Setting user status to Default');
         await transaction.set(userStatusRef, uPayload, {merge: false});
         return Promise.resolve('User status updated successfully');
-    }).then(result => {
+    }).then(async result => {
         console.log("Transaction success: ", result);
         let payload = {};
         if(code === NO_AVAILABLE_AST_CODE) {
