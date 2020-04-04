@@ -189,6 +189,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     let st_time = parseInt(requestObj.req_time);
     let en_time = st_time + util.getServiceDuration(requestObj.service, null);
     let astSlotDetails;
+    //1. Find an available assistant
     try{
         astSlotDetails = await schedular.getAvailableAssistant(requestObj.society_id, requestPath.monthId, requestObj.date, st_time, en_time, exceptions, forceAssistant);
     }catch(e) {
@@ -207,6 +208,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     console.log("Assistant details:: Id:",astSlotDetails._id," Booking assitant schedule: ", astSlotDetails.freeSlotLib);
     let slotRef = util.sortSlotsByHour(astSlotDetails.freeSlotLib);
     let bookingFlag;
+    //2. Book the assistant's time temporarily
     try{
         bookingFlag = await schedular.bookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, astSlotDetails._id);
     }catch(e) {
@@ -218,19 +220,81 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     if(bookingFlag !== 1) {
         console.error("Booking failed. Inform user to try again", slotRef);     
         return util.ERROR_CODE;
-    }
+    }    
 
+    //3. Send a request to the assistant
+    let assistantJobFlag = true;     //maintains a check of if sending request failed or updating assistant assignment failed.TBU in reverting in case fails
+    let timeCde = String(astSlotDetails.freeSlotLib[0].encode());
+    assistantJobFlag = sendAssistantRequest(requestPath._id,requestObj,timeCde);    
+
+    //4. Update request assignee and assistant activity
+    if(assistantJobFlag){
+        console.log("Updating the snapshot's assignee.");
+        let astBatch = db.batch();
+
+        let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);    
+        let payloadA = {
+            asn_id: astSlotDetails._id,
+            asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
+            slotRef: slotRef
+        };
+        astBatch.set(pathRef, payloadA, {merge: true});
+
+        let astActivityRef = db.collection(util.COLN_ASSISTANTS).doc(astSlotDetails._id).collection(util.SUBCOLN_ASSISTANT_ACTIVITY).doc(util.DOC_AST_ACTIVE_REQUEST);
+        let payloadB =  {};
+        payloadB[util.DOCFIELD_REQUEST_REF] = pathRef;
+        payloadB[util.DOCFIELD_TIMESTAMP] = fieldValue.serverTimestamp();
+        astBatch.set(astActivityRef,payloadB,{merge:false});
+
+        try{
+            // await pathRef.set({
+            //     asn_id: astSlotDetails._id,
+            //     asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
+            //     slotRef: slotRef
+            // }, {merge: true});
+            await astBatch.commit();
+
+            setTimeout(() => {
+                console.log("setting up a routine Request status check for requestId: " + requestPath._id);
+                checkRequestStatus(requestPath, astSlotDetails._id);
+            }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
+            return util.SUCCESS_CODE;
+        }catch(e) {
+            console.error("Updating assistant snapshot to assigned: Failed", e);
+            assistantJobFlag = false;
+        }
+    }
+    
+    if(!assistantJobFlag) {        
+        console.error("Either Sending request to Assistant/Updatin Ast fields failed. Unbooking assistant slot and returning error code");
+        try{
+            unbookingFlag = await schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, slotRef, astSlotDetails._id);
+        }catch(e) {
+            console.error("Received error tag from :unbookAssistantSlot: ", e, 
+                new Error("BookAssistantSlot method failed: " + e.toString()));
+            return util.ERROR_CODE;
+        }   
+        return util.ERROR_CODE;        
+    }
+}
+/**
+ * SENDASSISTANTREQUEST
+ * @param {String} requestId 
+ * @param {Request} requestObj 
+ * @param {String} timeCde 
+ */
+var sendAssistantRequest = async function(requestId, requestObj, timeCde) {
     const payload = {
         notification: {
-            title: 'New Work Request1',
+            title: 'Firestore Request',
             body: 'Click to confirm',
         //    click_action: 'launch_request'
         },
         data: {
-            rId: requestPath._id,
+            rId: requestId,
             service: requestObj.service,                            
-            date: String(requestObj.date),                            
-            time: String(astSlotDetails.freeSlotLib[0].encode()),      //cant send number
+            date: String(requestObj.date),
+            time: timeCde, 
             address: requestObj.address,
             socId: requestObj.society_id,
             //Command: COMMAND_WORK_REQUEST
@@ -239,44 +303,24 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             priority:'high',
             ttl:6000,
             notification:{
-                click_action:'.NotificationActivity',
+                click_action:'.MainActivity',
                 sound: 'nangs.mp3'
             }
-        },
-
-      
+        },      
     };
 
     try{
         let response = await util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST);
-        if(response === util.SUCCESS_CODE) {
-            console.log("Updating the snapshot's assignee.");
-            let pathRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);                            
-            try{
-                await pathRef.set({
-                    asn_id: astSlotDetails._id,
-                    asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
-                    slotRef: slotRef
-                }, {merge: true});
-
-                setTimeout(() => {
-                    console.log("Invoking routine Request status check for requestId: " + requestPath._id);
-                    checkRequestStatus(requestPath, astSlotDetails._id);
-                }, util.REQUEST_STATUS_CHECK_TIMEOUT);      
-                return util.SUCCESS_CODE;
-            }catch(e) {
-                console.error("Updating assistant snapshot to assigned: Failed", e);
-                return util.ERROR_CODE;
-            }                
-        }else{
+        if(response === util.SUCCESS_CODE) return true;
+        else {
             console.error("Failed to send request to assistant.", 
             new Error("Failed to send paylad to Assistant",payload,astSlotDetails._id));
-            return util.ERROR_CODE;
+            return false;
         }
     }catch(e) {
         console.error("Sending Assistant Payload failed",e, 
             new Error("sendAssistantPayload method failed: ",e.toString(),payload,astSlotDetails._id));
-    }    
+    } 
 }
 
 /**
@@ -367,15 +411,17 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
     let r_rejections = requestObj.rejections; 
 
     let batch = db.batch();
+    //1. Add Analytics if available
     if(astAnalyticsBlk !== 0) {
         batch.set(astAnalyticsBlk.ref, astAnalyticsBlk.payload, {merge: true});
     }   
     
     try{
+        //2. Unbook assistant timetable
         let unbookFlag = await schedular.unbookAssistantSlot(util.ALPHA_ZONE_ID, requestPath.monthId, requestObj.date, reqSlotRef, a_id);
         console.log("Unbooked Assistant Timetable: ", unbookFlag.toString());
         if(unbookFlag === 1) {
-            //revert request fields
+            //3. revert request fields
             //THIS will trigger request update again! BE CAREFUL
             let delRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
             let delPayload = {
@@ -386,6 +432,10 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
                 rejections: fieldValue.arrayUnion(a_id)
             } 
             batch.set(delRef, delPayload, {merge: true});
+
+            //4. Delete Assistant Activity with Active Request set
+            let activeReqRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ACTIVITY).doc(util.DOC_AST_ACTIVE_REQUEST);
+            batch.delete(activeReqRef);
 
             try{
                 await batch.commit();
