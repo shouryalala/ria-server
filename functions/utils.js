@@ -52,8 +52,6 @@ const COMMAND_MISC_MESSAGE = "MISC";    //miscellaneous
 //Miscellaneous messages type -- condes sent to userClient alongwith command
 const NO_AVAILABLE_AST_MSG = "NoAvailableAst";
 const ERROR_ENCOUNTERED_MSG = "ErrorMsg";
-
-
 //Service decodes
 const SERVICE_CLEANING = "Cx";
 const SERVICE_DUSTING = "Dx";
@@ -64,8 +62,11 @@ const SERVICE_DUSTING_UTENSILS = "DUx";
 const SERVICE_CLEANING_DUSTING_UTENSILS = "CDUx";
 const SERVICE_CHORE = "Chx";
 //Service Durations
-const SERVICE_CLEANING_DURATION = 1800;
-const SERVICE_UTENSILS_DURATION = 900;
+//-Cleaning
+const SERVICE_CLEANING_DURATION_BHK = [1500,1800,2400,2700];
+const SERVICE_UTENSILS_DURATION = 1200;
+const SERVICE_DUSTING_DURATION_BHK = [1200,1500,1800,2100];
+const SERVICE_BUFFER = 300;     //buffer time between tasks
 //Visit decodes
 const VISIT_STATUS_FAILED = -1;
 const VISIT_STATUS_CANCELLED = 0;
@@ -116,12 +117,18 @@ class DecodedTime {
  * 
  * return Duration in secs
  */ 
-var getServiceDuration = function(service, bhk) {
-    //TODO
+var getServiceDuration = function(service, bhk) {    
+    bhk = (bhk==undefined||bhk==null||bhk<1||bhk>SERVICE_CLEANING_DURATION_BHK.length)?3:bhk;   //default to 3 if NA
     switch(service) {
-        case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION;
+        case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION_BHK[bhk+1];        
         case SERVICE_UTENSILS: return SERVICE_UTENSILS_DURATION;
-        default: return SERVICE_CLEANING_DURATION;
+        case SERVICE_DUSTING: return SERVICE_DUSTING_DURATION_BHK[bhk+1];
+        case SERVICE_CLEANING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_CLEANING_UTENSILS;
+        case SERVICE_CLEANING_DUSTING: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_DUSTING_DURATION_BHK[bhk+1];
+        case SERVICE_DUSTING_UTENSILS: return SERVICE_DUSTING_DURATION_BHK[bhk+1] + SERVICE_UTENSILS_DURATION + SERVICE_BUFFER;
+        case SERVICE_CLEANING_DUSTING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + 
+                    SERVICE_DUSTING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
+        default: return SERVICE_CLEANING_DURATION_BHK[bhk+1];
     }
 }
 
@@ -409,8 +416,18 @@ var isRequestDateValid = function(yearId, monthId, date, pId) {
         console.error("Undefined Parameters:: yr:",yearId,",month:",monthId,"date:",date,"rId:",pId);
         return false;
     }
-    var tDate = new Date();
+    var tDate = getISTDate();
+
+    console.log("Time Object values: ", tDate.getDate(), tDate.getMonth(), tDate.getFullYear(), tDate.getHours(), tDate.getMinutes(), tDate.getSeconds(), tDate.getTimezoneOffset());
     return (tDate.getFullYear().toString() === yearId.trim() && yrCodes[tDate.getMonth()] === monthId.trim() && tDate.getDate() === date);
+}
+
+var getISTDate = function() {
+    var utcDate = new Date();
+    const utcToIstDiff = (5*60)+30;
+    utcDate.setMinutes(utcDate.getMinutes()+utcToIstDiff);
+    console.log("GetIstDate current Timestamp: ",utcDate);
+    return utcDate;
 }
 
 /**
@@ -622,5 +639,5 @@ module.exports = {
     SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,
-    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating    
+    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating,getISTDate 
 }

@@ -82,13 +82,14 @@ exports.onUpdateHandler = async (change, context) => {
         }
         console.log(visitObj);
         let visitObjRef = db.collection(util.COLN_VISITS).doc(requestPath.yearId).collection(requestPath.monthId).doc();
-        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);
+        let userActivityRef = db.collection(util.COLN_USERS).doc(after_data.user_id.trim()).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS);
+        let astActiveReqRef = db.collection(util.COLN_ASSISTANTS).doc(after_data.asn_id.trim()).collection(util.SUBCOLN_ASSISTANT_ACTIVITY).doc(util.DOC_AST_ACTIVE_REQUEST);
         
         let batch = db.batch();
-        //set visit document        
+        //1. set visit document        
         batch.set(visitObjRef, visitObj);
         console.log("Created initial Visit object: ", visitObj, " for requestID: " + requestPath._id);
-        //set user activity            
+        //2. set user activity            
         var userStatusObj = {
             visit_id: visitObjRef.path,
             visit_status: util.VISIT_STATUS_UPCOMING,
@@ -96,6 +97,9 @@ exports.onUpdateHandler = async (change, context) => {
         }
         //let activityPromise = await userActivityRef.set(userStatusObj);
         batch.set(userActivityRef, userStatusObj);
+
+        //3. Deleting assistant active requests document
+        batch.delete(astActiveReqRef);
         try{
             console.log("Setting both documents in a batch commit");
             await batch.commit();
@@ -225,7 +229,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     //3. Send a request to the assistant
     let assistantJobFlag = true;     //maintains a check of if sending request failed or updating assistant assignment failed.TBU in reverting in case fails
     let timeCde = String(astSlotDetails.freeSlotLib[0].encode());
-    assistantJobFlag = sendAssistantRequest(requestPath._id,requestObj,timeCde);    
+    assistantJobFlag = sendAssistantRequest(astSlotDetails._id,requestPath._id,requestObj,timeCde);    
 
     //4. Update request assignee and assistant activity
     if(assistantJobFlag){
@@ -275,15 +279,16 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             return util.ERROR_CODE;
         }   
         return util.ERROR_CODE;        
-    }
+    }    
 }
 /**
  * SENDASSISTANTREQUEST
+ * @parma {String} astId
  * @param {String} requestId 
  * @param {Request} requestObj 
  * @param {String} timeCde 
  */
-var sendAssistantRequest = async function(requestId, requestObj, timeCde) {
+var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) {
     const payload = {
         notification: {
             title: 'Firestore Request',
@@ -296,7 +301,7 @@ var sendAssistantRequest = async function(requestId, requestObj, timeCde) {
             date: String(requestObj.date),
             time: timeCde, 
             address: requestObj.address,
-            socId: requestObj.society_id,
+            society_id: requestObj.society_id,
             //Command: COMMAND_WORK_REQUEST
         },
         android:{
@@ -310,16 +315,16 @@ var sendAssistantRequest = async function(requestId, requestObj, timeCde) {
     };
 
     try{
-        let response = await util.sendAssistantPayload(astSlotDetails._id, payload, util.COMMAND_WORK_REQUEST);
+        let response = await util.sendAssistantPayload(astId, payload, util.COMMAND_WORK_REQUEST);
         if(response === util.SUCCESS_CODE) return true;
         else {
             console.error("Failed to send request to assistant.", 
-            new Error("Failed to send paylad to Assistant",payload,astSlotDetails._id));
+            new Error("Failed to send paylad to Assistant",payload,astId));
             return false;
         }
     }catch(e) {
         console.error("Sending Assistant Payload failed",e, 
-            new Error("sendAssistantPayload method failed: ",e.toString(),payload,astSlotDetails._id));
+            new Error("sendAssistantPayload method failed: ",e.toString(),payload,astId));
     } 
 }
 

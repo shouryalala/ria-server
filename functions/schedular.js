@@ -27,7 +27,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
      * - req_time_buffer -> (shoud be greater than current time)
      * 
      */    
-    let today = new Date();
+    let today = util.getISTDate();
     console.log("Debug:: Today: " + today.getDate());
     if(date < today.getDate()){
         console.error("Received a request for a date in the past.");
