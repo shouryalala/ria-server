@@ -25,7 +25,6 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
      * - req_st_time -> (should be greater than current time, should consider travelling distance)
      * - req_en_time -> (bleh)
      * - req_time_buffer -> (shoud be greater than current time)
-     * 
      */    
     let today = util.getISTDate();
     console.log("Debug:: Today: " + today.getDate());
@@ -36,9 +35,9 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     let st_time_obj = util.decodeHourMinFromTime(st_time);   //p
     let en_time_obj = util.decodeHourMinFromTime(en_time);     
 
-    //let st_time_buffer_obj = util.decodeHourMinFromTime(st_time - util.BUFFER_TIME);
+    //let st_time_buffer_obj = util.decodeHourMinFromTime(st_time - util.VISIT_BUFFER_TIME);
     let st_time_buffer_obj = util.decodeHourMinFromTime(st_time);   //dont look before requested time
-    let en_time_buffer_obj = util.decodeHourMinFromTime(en_time + util.BUFFER_TIME);
+    let en_time_buffer_obj = util.decodeHourMinFromTime(en_time);
 
     console.log("Decoded Time: Start: " + st_time_obj.toString() + " End: " + en_time_obj.toString());
     console.log("Decoded Buffer Time: Start: " + st_time_buffer_obj.toString() + " End: " + en_time_buffer_obj.toString());
@@ -46,11 +45,11 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
 
     //make sure start times are not before current time
 
-    //if(date === today.getDate()) {    //not required
-        console.log("Verifying time slots")//TODO
-        st_time_obj = util.verifyTime(st_time_obj,today.getHours(), today.getMinutes());
-        st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
-    //}    
+    // if(date === today.getDate()) {    //not required
+    //     console.log("Verifying time slots")//TODO
+    //     st_time_obj = util.verifyTime(st_time_obj,today.getHours(), today.getMinutes());
+    //     st_time_buffer_obj = util.verifyTime(st_time_buffer_obj,today.getHours(), today.getMinutes());
+    // }    
     let res = await getTimetable(society_id, util.ALPHA_ZONE_ID, monthId, date, st_time_buffer_obj, en_time_buffer_obj, exceptions, forceAssistant);
     if(res === util.ERROR_CODE || res === util.NO_AVAILABLE_AST_CODE) {
         console.log("Received an ERROR/NO_AST code from getTimetable. Exiting method");

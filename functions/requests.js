@@ -62,8 +62,8 @@ exports.onUpdateHandler = async (change, context) => {
         after_data.asn_response === util.AST_RESPONSE_ACCEPT && after_data.status === util.REQ_STATUS_ASSIGNED) {
         console.log("Assistant accepted and assigned request. Creating visit obj");        
         //assumption: the visit and request objects are in the SAME YEAR AND MONTH. thus only saving requestID        
-        let vis_st = util.getSlotMinTime(after_data.slotRef);
-        let vis_en = util.getSlotMaxTime(after_data.slotRef);
+        let vis_st = util.getEncodedVisitStartTimeFromSlotRef(after_data.slotRef);
+        let vis_en = util.getEncodedVisitEndTimeFromSlotRef(after_data.slotRef);
         var visitObj = {
             req_id: requestPath._id,
             user_id: after_data.user_id.trim(),
@@ -75,8 +75,8 @@ exports.onUpdateHandler = async (change, context) => {
             address: after_data.address,
             society_id: after_data.society_id.trim(),
             req_st_time: after_data.req_time,
-            vis_st_time: vis_st.encode(),
-            vis_en_time: vis_en.encode(),
+            vis_st_time: vis_st,
+            vis_en_time: vis_en,
             status: util.VISIT_STATUS_UPCOMING,
             timestamp: fieldValue.serverTimestamp()
         }
@@ -115,8 +115,8 @@ exports.onUpdateHandler = async (change, context) => {
                     ass_id: after_data.asn_id,
                     date: String(after_data.date),
                     req_st_time: String(after_data.req_time),                    
-                    vis_st_time: String(vis_st.encode()),
-                    vis_en_time: String(vis_en.encode()),
+                    vis_st_time: String(vis_st),
+                    vis_en_time: String(vis_en),
                     service: after_data.service,
                     status: String(util.VISIT_STATUS_UPCOMING),
                     user_id: after_data.user_id,    //shouldnt be required
@@ -190,8 +190,8 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             new Error("Expired request recevied " + JSON.stringify(requestPath)));        
         return util.ERROR_CODE;
     }    
-    let st_time = parseInt(requestObj.req_time);
-    let en_time = st_time + util.getServiceDuration(requestObj.service, null);
+    let st_time = util.VISIT_BUFFER_TIME + parseInt(requestObj.req_time);
+    let en_time = st_time + util.getServiceDuration(requestObj.service, requestObj.bhk);
     let astSlotDetails;
     //1. Find an available assistant
     try{
@@ -340,6 +340,7 @@ var checkRequestStatus = async function(requestPath, assId) {
     console.log("::checkRequestStatus::INVOKED");
     let docSnapshot;
     try{
+        //TODO CONVERT TO TRANSACTION
         docSnapshot = await db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).get();
         const aDoc = docSnapshot.data();
         if(aDoc.asn_id === undefined && aDoc.asn_response === undefined) {

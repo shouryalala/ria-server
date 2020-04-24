@@ -67,6 +67,7 @@ const SERVICE_CLEANING_DURATION_BHK = [1500,1800,2400,2700];
 const SERVICE_UTENSILS_DURATION = 1200;
 const SERVICE_DUSTING_DURATION_BHK = [1200,1500,1800,2100];
 const SERVICE_BUFFER = 300;     //buffer time between tasks
+const VISIT_BUFFER_TIME = 300; //buffer time between visits
 //Visit decodes
 const VISIT_STATUS_FAILED = -1;
 const VISIT_STATUS_CANCELLED = 0;
@@ -84,7 +85,6 @@ const SUCCESS_CODE = 1;
 const FLD_CANCLD_BY_USER = "cncld_by_user";
 const FLD_CANCLD_BY_AST = "cncld_by_ast";
 const TOTAL_SLOTS = 6;
-const BUFFER_TIME = 1800;
 const ALPHA_ZONE_ID = 'z23';
 const REQUEST_STATUS_CHECK_TIMEOUT = 60000  //60 seconds
 const dummy1 = 'bhenbhaibhenbhai';
@@ -118,12 +118,12 @@ class DecodedTime {
  * return Duration in secs
  */ 
 var getServiceDuration = function(service, bhk) {    
-    bhk = (bhk==undefined||bhk==null||bhk<1||bhk>SERVICE_CLEANING_DURATION_BHK.length)?3:bhk;   //default to 3 if NA
+    bhk = (bhk===undefined||bhk===null||bhk<1||bhk>SERVICE_CLEANING_DURATION_BHK.length)?3:bhk;   //default to 3 if NA
     switch(service) {
         case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION_BHK[bhk+1];        
         case SERVICE_UTENSILS: return SERVICE_UTENSILS_DURATION;
         case SERVICE_DUSTING: return SERVICE_DUSTING_DURATION_BHK[bhk+1];
-        case SERVICE_CLEANING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_CLEANING_UTENSILS;
+        case SERVICE_CLEANING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
         case SERVICE_CLEANING_DUSTING: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_DUSTING_DURATION_BHK[bhk+1];
         case SERVICE_DUSTING_UTENSILS: return SERVICE_DUSTING_DURATION_BHK[bhk+1] + SERVICE_UTENSILS_DURATION + SERVICE_BUFFER;
         case SERVICE_CLEANING_DUSTING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + 
@@ -160,24 +160,34 @@ var sortSlotsByHour = function(slots){
  * 
  * returns: DecodedTime: [hr:5 , min:40]
  */
-var getSlotMinTime = function(slotRef){
+var getEncodedVisitStartTimeFromSlotRef = function(slotRef){
+    let header = 'GETSLOTMINTIME: ';
     let minHr = 99;     //99 is random. just has to be > 60
-    let minMin = 99;
-    if(slotRef !== null) {
-        for(hour in slotRef) {
-            minHr = (minHr < hour)?minHr:hour;
+    let minSlot = 99;
+    if(slotRef === null || slotRef === undefined)return null;
+
+    for(hour in slotRef) {
+        console.log(header,`Inside slotRef hour: ${hour}`);
+        minHr = (minHr < hour)?minHr:hour;
+        console.log(header,`hour: ${hour}, Current MinHr: ${minHr}`);
+        if(minHr === hour){
+            console.log(header,`Inside (minHr===hour) hour: ${hour}`);
+            minSlot = 99;
             let slots = slotRef[hour];
             if(slots !== undefined) {
                 for(s in slots) {
-                    minMin = (minMin < slots[s])?minMin:slots[s];
+                    console.log(header,`Inside minSlot: Slot: ${slots[s]}`);
+                    minSlot = (minSlot < slots[s])?minSlot:slots[s];
+                    console.log(header,`Minslot: ${minSlot}`);
                 }
             }
         }
-        //minMin is actually the slot
-        minMin *= 10;
-        return new DecodedTime(minHr, minMin);
     }
-    return null;    
+    console.log(header,`Final Hour,Slot: ${minHr}, ${minSlot}`);
+    let finalCode = minHr*3600 + minSlot*10*60;
+    finalCode += VISIT_BUFFER_TIME;
+    console.log(header,`Final Code: ${finalCode}`);
+    return finalCode;
 }
 
 
@@ -186,24 +196,33 @@ var getSlotMinTime = function(slotRef){
  * 
  * returns: DecodedTime: [hr:6 , min:10]
  */
-var getSlotMaxTime = function(slotRef){
+var getEncodedVisitEndTimeFromSlotRef = function(slotRef){
+    let header = 'GETSLOTMAXTIME: ';
     let maxHr = -1;
-    let maxMin = -1;
-    if(slotRef !== null) {
-        for(hour in slotRef) {
-            maxHr = (maxHr > hour)?maxHr:hour;
+    let maxSlot = -1;
+    if(slotRef === null || slotRef === undefined) return null;
+    
+    for(hour in slotRef) {        
+        console.log(header,`Inside slotRef hour: ${hour}`);
+        maxHr = (maxHr > hour)?maxHr:hour;
+        console.log(header,`hour: ${hour}, Current MaxHr: ${maxHr}`);
+        if(maxHr === hour) {
+            console.log(header,`Inside (maxHr===hour) hour: ${hour}`);
+            maxSlot = -1;   //refresh maxSlot
             let slots = slotRef[hour];
             if(slots !== undefined) {
                 for(s in slots) {
-                    maxMin = (maxMin > slots[s])?maxMin:slots[s];
+                    console.log(header,`Inside maxSlot: Slot: ${slots[s]}`);
+                    maxSlot = (maxSlot > slots[s])?maxSlot:slots[s];
+                    console.log(header,`MaxSlot: ${maxSlot}`);
                 }
             }
         }
-        //maxMin is actually the slot
-        maxMin *= 10;
-        return new DecodedTime(maxHr, maxMin);
-    }
-    return null;    
+    }        
+    console.log(header,`Final Hour,Slot: ${maxHr}, ${maxSlot}`);
+    let finalCode = maxHr*3600 + maxSlot*10*60;
+    console.log(header,`Final Code: ${finalCode}`);
+    return finalCode;
 }
 
 
@@ -637,7 +656,7 @@ module.exports = {
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,DOC_AST_ACTIVE_REQUEST,DOCFIELD_REQUEST_REF,DOCFIELD_TIMESTAMP,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,
     AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_COMPLETED,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,
     SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,
-    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
-    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getSlotMinTime,getSlotMaxTime,
+    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,VISIT_BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
+    dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getEncodedVisitStartTimeFromSlotRef,getEncodedVisitEndTimeFromSlotRef,
     verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating,getISTDate 
 }
