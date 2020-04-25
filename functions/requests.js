@@ -471,16 +471,16 @@ var rerouteRequest = async function(requestPath, requestObj) {
     let a_id = requestObj.asn_id;
     let r_rejections = requestObj.rejections; 
     let no_response_flag = requestObj.no_response;
-
+    console.log('Deciphered params: ',reqSlotRef, a_id, r_rejections, no_response_flag);
     let batch = db.batch();
     //1. Analytics
     let aRef = null;
     let rPayload = null;
-    if(no_response_flag !== undefined && no_response_flag !== null && no_response_flag) {
+    if(no_response_flag !== undefined && no_response_flag) {
         //Assistant didnt respond to request
         console.log('Assistant didnt respond to request. Setting noresponse analytics',requestPath._id);
         let docKey = `${requestPath.yearId}-${requestPath.monthId}-NORES`;  //ex: 2020-JAN-NORES
-        aRef = db.collection(util.COLN_ASSISTANTS).doc(assId).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+        aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
         rPayload = {
             noresponse: fieldValue.arrayUnion(requestPath._id)
         };        
