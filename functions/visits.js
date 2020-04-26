@@ -223,15 +223,16 @@ var onVisitCompleted = async function(visitObj, visitPath){
                 userCompletedVisits = 1;    
             }else{
                 let currUserStats = currUserStatsSnapShot.data();
+                console.log('Previous lifetimeMins: ', currUserStats.total_mins, ' comp_visits: ', currUserStats.comp_visits);
                 userLifetimeMins = (currUserStats.total_mins === undefined)?totalVisitTime:currUserStats.totalMins+totalVisitTime;
                 userCompletedVisits = (currUserStats.comp_visits === undefined)?1:currUserStats.comp_visits+1;
             }            
-            console.log('Current visit total time: ', totalVisitTime, 'Recevied snapshot: ', currUserStatsSnapShot, 
+            console.log('Current visit total time: ', totalVisitTime, 
                     ', UserLifetime mins & comp visits: ', userLifetimeMins, userCompletedVisits);
         }catch(e){
             console.error('Error while fetching user stats: ', e.toString(), new Error('UserStatistics doc read failed: ' + e.toString()));
         }
-        if(userLifetimeMins !== null && userCompletedVisits !== null) {
+        if(userLifetimeMins !== null && !isNaN(userLifetimeMins) && userCompletedVisits !== null && !isNaN(userCompletedVisits)) {
             let newStats = {
                 total_mins: userLifetimeMins,
                 comp_visits: userCompletedVisits

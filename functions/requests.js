@@ -143,20 +143,21 @@ exports.onUpdateHandler = async (change, context) => {
          * - revert request object fields
          * - reassign request
          */
-        let rPayload = {
-            rejections: fieldValue.arrayUnion(requestPath._id)
-        };
+
+        // let rPayload = {
+        //     rejections: fieldValue.arrayUnion(requestPath._id)
+        // };
       
-        let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
-        let aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
-        let astAnalyticsBlock = {
-            ref: aRef,
-            payload: rPayload
-        };
+        // let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
+        // let aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+        // let astAnalyticsBlock = {
+        //     ref: aRef,
+        //     payload: rPayload
+        // };
 
         let flag;
         try{
-            flag = await rerouteRequest(requestPath, after_data, astAnalyticsBlock);   
+            flag = await rerouteRequest(requestPath, after_data);   
         }catch(e) {
             console.error("RerouteRequest method failed",e);
             flag = util.ERROR_CODE;
@@ -328,6 +329,7 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
     } 
 }
 
+
 /**
  * CHECKREQUESTSTATUS
  * @param {yearId: string, monthId: string, _id: string} requestPath
@@ -337,6 +339,59 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
  * -if not, restart request handling process
  */
 var checkRequestStatus = async function(requestPath, assId) {
+    console.log("::checkRequestStatus::INVOKED");    
+    let requestRef = db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id);
+    db.runTransaction(async transaction => {
+        let docSnapshot = await transaction.get(requestRef);
+        let aDoc = docSnapshot.data();
+        if(aDoc.asn_id === undefined && aDoc.asn_response === undefined) {
+            console.log("Request has no assignee yet. Prolly no assistant was available");
+            return util.SUCCESS_CODE;
+        }
+        if(aDoc.asn_id !== assId) {
+            console.log("checkRequestStatus for RequestId: " + requestPath._id + ", AssistantId: " + assId + " outdated. Request reassigned since.");
+            //nothing to be done here
+            return Promise.resolve("No request updates required. Transaction complete");
+        }
+        else {
+            if(aDoc.asn_response === util.AST_RESPONSE_ACCEPT){
+                //TODO maybe verify if status is assigned yet or not. not reqd
+                console.log("checkRequestStatus verified request: " + requestPath._id + " All in order.");
+                return Promise.resolve("No request updates required. Transaction complete");
+                
+            }else if(aDoc.asn_response === util.AST_RESPONSE_REJECT){
+                //should never happen. corner case when request is in process of being rerouted and gets caught by this method
+                console.error("Request: " + requestPath._id + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.", 
+                    new Error("Found Request sitting in REJECTED state: " + JSON.stringify(requestPath) + " " + assId));
+                return Promise.reject(new Error("Request sitting in Rejected state"));
+            }else if(aDoc.asn_response === util.AST_RESPONSE_NIL){
+                //the assigned assistant is still the same and the her response is stil nil
+                //log analytics
+                console.log("Request: " + requestPath._id + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");                     
+                let updatePayload = {
+                    asn_response: util.AST_RESPONSE_REJECT,
+                    no_response: true
+                };
+                console.log('CheckrequestStatus transaction update payload: ', updatePayload);
+                await transaction.update(requestRef,updatePayload);
+                return Promise.resolve("No response from ast. Request ast response set to Rejected");
+            }else{
+                return Promise.resolve("Ast response unavailable"); //should never reach here
+            }
+        }
+        
+    });
+}
+
+/**
+ * CHECKREQUESTSTATUS
+ * @param {yearId: string, monthId: string, _id: string} requestPath
+ * @param {string} assId (assistant ID)
+ * 
+ * method checks whether assistant has responded to request or not after waiting for a period of time. 
+ * -if not, restart request handling process
+ */
+var checkRequestStatus2 = async function(requestPath, assId) {
     console.log("::checkRequestStatus::INVOKED");
     let docSnapshot;
     try{
@@ -380,7 +435,7 @@ var checkRequestStatus = async function(requestPath, assId) {
                 let flag;
                 try{
                     //rerouteRequest fail/success, + requestAssistantService fail/success captured here
-                    flag = await rerouteRequest(requestPath, aDoc, astAnalyticsBlk);
+                    flag = await rerouteRequest(requestPath, aDoc);
                 }catch(e) {
                     flag = util.ERROR_CODE;
                     console.error("RerouteRequest method failed: ",e, 
@@ -406,8 +461,8 @@ var checkRequestStatus = async function(requestPath, assId) {
  * @param {Request Obj} requestObj 
  * @param {ref: string, payload: obj} astAnalyticsBlk, to be added to a batch command
  */
-var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
-    astAnalyticsBlk = astAnalyticsBlk || 0; //sets to 0 if not passed by calling function
+var rerouteRequest = async function(requestPath, requestObj) {
+    //astAnalyticsBlk = astAnalyticsBlk || 0; //sets to 0 if not passed by calling function
     if(requestPath === undefined || requestObj === undefined || requestObj.asn_id === undefined || requestObj.slotRef === undefined) {
         console.error("Invalid parameters. Dropping rerouteRequest. Paramters: ",requestPath,requestObj);
         return util.ERROR_CODE;
@@ -415,11 +470,33 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
     let reqSlotRef = requestObj.slotRef;
     let a_id = requestObj.asn_id;
     let r_rejections = requestObj.rejections; 
-
+    let no_response_flag = requestObj.no_response;
+    console.log('Deciphered params: ',reqSlotRef, a_id, r_rejections, no_response_flag);
     let batch = db.batch();
-    //1. Add Analytics if available
-    if(astAnalyticsBlk !== 0) {
-        batch.set(astAnalyticsBlk.ref, astAnalyticsBlk.payload, {merge: true});
+    //1. Analytics
+    let aRef = null;
+    let rPayload = null;
+    if(no_response_flag !== undefined && no_response_flag) {
+        //Assistant didnt respond to request
+        console.log('Assistant didnt respond to request. Setting noresponse analytics',requestPath._id);
+        let docKey = `${requestPath.yearId}-${requestPath.monthId}-NORES`;  //ex: 2020-JAN-NORES
+        aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+        rPayload = {
+            noresponse: fieldValue.arrayUnion(requestPath._id)
+        };        
+    }else{
+        //Assitant rejected the request
+        console.log('Assistant rejected request. Setting reject analytics',requestPath._id);
+        let docKey = `${requestPath.yearId}-${requestPath.monthId}-RJCT`;  //ex: 2019-OCT-RJCT
+        aRef = db.collection(util.COLN_ASSISTANTS).doc(a_id).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
+        rPayload = {
+            rejections: fieldValue.arrayUnion(requestPath._id)
+        };
+    }
+    
+    if(aRef !== null && rPayload !== null) {
+        console.log('Analytics for RequestID:',requestPath._id,' ref:',aRef,' payload: ',rPayload);
+        batch.set(aRef, rPayload, {merge: true});
     }   
     
     try{
@@ -437,6 +514,10 @@ var rerouteRequest = async function(requestPath, requestObj, astAnalyticsBlk) {
                 status: util.REQ_STATUS_UNASSIGNED,
                 rejections: fieldValue.arrayUnion(a_id)
             } 
+            if(no_response_flag !== undefined && no_response_flag !== null) {
+                //delete no_response field as well if set
+                delPayload['no_response'] = fieldValue.delete();
+            }
             batch.set(delRef, delPayload, {merge: true});
 
             //4. Delete Assistant Activity with Active Request set
