@@ -1,6 +1,7 @@
 const util = require('./utils');
 const schedular =  require('./schedular');
 const {db, fieldValue} = require('./admin');
+const voiceutil = require('./voice_notification');
 
 /**
  * USERREQUESTHANDLER
@@ -290,6 +291,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
  * @param {String} timeCde 
  */
 var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) {
+    //voiceutil.sendVoiceNotification('+917019658746',);
     const payload = {
         notification: {
             title: 'Firestore Request',
