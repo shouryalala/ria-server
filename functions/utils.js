@@ -82,6 +82,8 @@ const NO_AVAILABLE_AST_CODE = 2;
 const ERROR_CODE = 0;
 const SUCCESS_CODE = 1;
 //
+const VOICE_NOTIFICATION_TTS = "KAAM AA GAYA, APP KHOLAE, KAAM AA GAYA, APP KHOLAE";
+//
 const FLD_CANCLD_BY_USER = "cncld_by_user";
 const FLD_CANCLD_BY_AST = "cncld_by_ast";
 const TOTAL_SLOTS = 6;
@@ -658,5 +660,5 @@ module.exports = {
     SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,
     VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,VISIT_BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getEncodedVisitStartTimeFromSlotRef,getEncodedVisitEndTimeFromSlotRef,
-    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating,getISTDate 
+    verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating,getISTDate,VOICE_NOTIFICATION_TTS 
 }
