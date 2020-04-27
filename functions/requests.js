@@ -63,13 +63,20 @@ exports.onUpdateHandler = async (change, context) => {
         after_data.asn_response === util.AST_RESPONSE_ACCEPT && after_data.status === util.REQ_STATUS_ASSIGNED) {
         console.log("Assistant accepted and assigned request. Creating visit obj");        
         //assumption: the visit and request objects are in the SAME YEAR AND MONTH. thus only saving requestID        
+        if(after_data.slotRef === undefined || after_data.asn_id === undefined) {
+            console.error("Request accepted by ast but invalid params:", after_data.slotRef, after_data.asn_id);
+            return util.ERROR_CODE;
+        }
         let vis_st = util.getEncodedVisitStartTimeFromSlotRef(after_data.slotRef);
         let vis_en = util.getEncodedVisitEndTimeFromSlotRef(after_data.slotRef);
+        // let astObj = await db.collection(util.COLN_ASSISTANTS).doc(after_data.asn_id.trim()).get();
         var visitObj = {
             req_id: requestPath._id,
             user_id: after_data.user_id.trim(),
             user_mobile: after_data.user_mobile.trim(),
-            ass_id: after_data.asn_id.trim(),
+            ass_id: after_data.asn_id.trim(),   //TODO change field name man
+            // ast_name: astObj.name,
+            // ast_mobile: astObj.mobile,
             date: after_data.date,
             cost: after_data.cost,
             service: after_data.service,
@@ -291,7 +298,6 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
  * @param {String} timeCde 
  */
 var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) {
-    voiceutil.sendVoiceNotification('+917019658746', util.VOICE_NOTIFICATION_TTS);
     const payload = {
         notification: {
             title: 'Firestore Request',
@@ -318,6 +324,7 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
     };
 
     try{
+        let voiceFlag = voiceutil.sendVoiceNotification(astId);
         let response = await util.sendAssistantPayload(astId, payload, util.COMMAND_WORK_REQUEST);
         if(response === util.SUCCESS_CODE) return true;
         else {
@@ -497,7 +504,7 @@ var rerouteRequest = async function(requestPath, requestObj) {
     }
     
     if(aRef !== null && rPayload !== null) {
-        console.log('Analytics for RequestID:',requestPath._id,' ref:',aRef,' payload: ',rPayload);
+        console.log('Analytics for RequestID:',requestPath._id,' payload: ',rPayload);
         batch.set(aRef, rPayload, {merge: true});
     }   
     

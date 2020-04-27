@@ -346,7 +346,7 @@ var sendAssistantPayload = async function(assistantID, payload, command) {
             let tokenData = assistantToken.data();
             console.log("Token Data: ", tokenData);            
             if(payload['data'] !== undefined){        
-                payload.data['Command'] = command;  //TODO change assistant payload case to lower            
+                payload.data['command'] = command;  //TODO change assistant payload case to lower            
             }
             console.log("Payload being sent: ", payload);
             try{                
