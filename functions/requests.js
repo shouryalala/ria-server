@@ -324,8 +324,9 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
     };
 
     try{
-        let voiceFlag = voiceutil.sendVoiceNotification(astId);
+        let voiceFlag = await voiceutil.sendVoiceNotification(astId);
         let response = await util.sendAssistantPayload(astId, payload, util.COMMAND_WORK_REQUEST);
+        console.log("Snet Voice Notification: ", voiceFlag, "Send Data Payload: ", (response===util.SUCCESS_CODE));
         if(response === util.SUCCESS_CODE) return true;
         else {
             console.error("Failed to send request to assistant.", 
