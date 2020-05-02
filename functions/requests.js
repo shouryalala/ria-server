@@ -69,13 +69,14 @@ exports.onUpdateHandler = async (change, context) => {
         }
         let vis_st = util.getEncodedVisitStartTimeFromSlotRef(after_data.slotRef);
         let vis_en = util.getEncodedVisitEndTimeFromSlotRef(after_data.slotRef);
-        // let astObj = await db.collection(util.COLN_ASSISTANTS).doc(after_data.asn_id.trim()).get();
+        let astObj = await db.collection(util.COLN_ASSISTANTS).doc(after_data.asn_id.trim()).get();
+        console.log('Received assistant name: ', astObj.data().name);
         var visitObj = {
             req_id: requestPath._id,
             user_id: after_data.user_id.trim(),
             user_mobile: after_data.user_mobile.trim(),
             ass_id: after_data.asn_id.trim(),   //TODO change field name man
-            // ast_name: astObj.name,
+            ast_name: astObj.data().name,
             // ast_mobile: astObj.mobile,
             date: after_data.date,
             cost: after_data.cost,
@@ -114,8 +115,8 @@ exports.onUpdateHandler = async (change, context) => {
             //create payload to be sent to the user
             let payload = {
                 notification: {
-                    title: 'Assitant on their way',
-                    body: after_data.asn_id + ' will reach soon!',                    
+                    title: 'Visit successfully scheduled 🥳',
+                    body: astObj.data().name + ' has been assigned',
                 },
                 //Field keys should replicate client visit object keys
                 data: {
@@ -199,7 +200,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             new Error("Expired request recevied " + JSON.stringify(requestPath)));        
         return util.ERROR_CODE;
     }    
-    let st_time = util.VISIT_BUFFER_TIME + parseInt(requestObj.req_time);
+    let st_time = util.VISIT_BUFFER_TIME + parseInt(requestObj.req_time);   //static buffer time added. Bad logic?
     let en_time = st_time + util.getServiceDuration(requestObj.service, requestObj.bhk);
     let astSlotDetails;
     //1. Find an available assistant
@@ -237,7 +238,8 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
 
     //3. Send a request to the assistant
     let assistantJobFlag = true;     //maintains a check of if sending request failed or updating assistant assignment failed.TBU in reverting in case fails
-    let timeCde = String(astSlotDetails.freeSlotLib[0].encode());
+    //let timeCde = String(astSlotDetails.freeSlotLib[0].encode());
+    let timeCde = String(util.getEncodedVisitStartTimeFromSlotRef(slotRef));
     assistantJobFlag = sendAssistantRequest(astSlotDetails._id,requestPath._id,requestObj,timeCde);    
 
     //4. Update request assignee and assistant activity

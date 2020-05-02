@@ -42,20 +42,21 @@ exports.onUpdateHandler = async(change, context) => {
                 modified_time: fieldValue.serverTimestamp()
             }
             let userActivityPromise = await db.collection(util.COLN_USERS).doc(after_data.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_ACTIVITY_STATUS).set(userStatusObj);
-                //create payload to be sent to the user
-                let payload = {
-                    notification: {
-                        title: 'Work in progress!',
-                        body: after_data.ass_id + ' has started!',
-                    },
-                    //Field keys should replicate client visit object keys
-                    data: {
-                        visit_path: visitPathStr,
-                        ass_id: after_data.ass_id,                    
-                        status: String(util.VISIT_STATUS_ONGOING),
-                        user_id: after_data.user_id,    //shouldnt be required
-                    }
-                };
+            //create payload to be sent to the user
+            let vName = (after_data.ast_name !== undefined)?after_data.ast_name:'Assistant';
+            let payload = {
+                notification: {
+                    title: 'Work underway!',
+                    body: `${vName} has checked into work`,
+                },
+                //Field keys should replicate client visit object keys
+                data: {
+                    visit_path: visitPathStr,
+                    ass_id: after_data.ass_id,                    
+                    status: String(util.VISIT_STATUS_ONGOING),
+                    user_id: after_data.user_id,    //shouldnt be required
+                }
+            };
             let sendPayloadFlag = await util.sendUserPayload(after_data.user_id, payload, util.COMMAND_VISIT_ONGOING);
             console.log("Assitant analytics updated: ", anPromise, " User Activity updated: ", userActivityPromise, " Payload sent to user: ", sendPayloadFlag);
         }
@@ -96,10 +97,11 @@ exports.onUpdateHandler = async(change, context) => {
                     console.log("Setting both documents in a batch commit");
                     await batch.commit();
                     //create payload to be sent to the user
+                    let vName = (after_data.ast_name !== undefined)?after_data.ast_name:'Assistant';
                     let payload = {
                         notification: {
-                            title: 'Assistant has cancelled :(',
-                            body: 'Shall we book again?'
+                            title: 'Visit was cancelled',
+                            body: `${vName} cannot make it. Click to reschedule`
                         },
                         data: {
                             visit_path: visitPathStr,
@@ -214,18 +216,21 @@ var onVisitCompleted = async function(visitObj, visitPath){
 
     //2. ADD TOTAL MINS UP AND ADD TO BATCH
     if(visitObj.act_st_time !== undefined && visitObj.act_en_time !== undefined) {
-        let totalVisitTime = visitObj.act_en_time - visitObj.act_st_time;        
+        let totalVisitTimeInSecs = visitObj.act_en_time - visitObj.act_st_time;        
+        let totalVisitTime = (!isNaN(totalVisitTimeInSecs))?Math.round(Number(totalVisitTimeInSecs)/60):0;
+        console.log('Visit secs: ', totalVisitTimeInSecs, ' Visit Mins: ', totalVisitTime);
         let userStatsRef = db.collection(util.COLN_USERS).doc(visitObj.user_id).collection(util.SUBCOLN_USER_ACTIVITY).doc(util.DOC_USER_STATS);        
         try{
             let currUserStatsSnapShot = await userStatsRef.get();
             if(currUserStatsSnapShot === undefined || !currUserStatsSnapShot.exists) {
-                userLifetimeMins = totalVisitTime;
+                userLifetimeMins = Number(totalVisitTime);
                 userCompletedVisits = 1;    
             }else{
                 let currUserStats = currUserStatsSnapShot.data();
                 console.log('Previous lifetimeMins: ', currUserStats.total_mins, ' comp_visits: ', currUserStats.comp_visits);
-                userLifetimeMins = (currUserStats.total_mins === undefined)?totalVisitTime:currUserStats.totalMins+totalVisitTime;
-                userCompletedVisits = (currUserStats.comp_visits === undefined)?1:currUserStats.comp_visits+1;
+                userLifetimeMins = (currUserStats.total_mins === undefined || isNaN(currUserStats.total_mins))?Number(totalVisitTime):
+                        Number(currUserStats.total_mins)+Number(totalVisitTime);
+                userCompletedVisits = (currUserStats.comp_visits === undefined || isNaN(currUserStats.comp_visits))?1:currUserStats.comp_visits+1;
             }            
             console.log('Current visit total time: ', totalVisitTime, 
                     ', UserLifetime mins & comp visits: ', userLifetimeMins, userCompletedVisits);
@@ -275,7 +280,7 @@ var onVisitCompleted = async function(visitObj, visitPath){
         //5. Notify User of completion
         let payload = {
             notification: {
-                title: 'All done!',
+                title: 'Service completed \\uD83E\\uDD73',
                 body: 'Please rate your experience',
             },
             //Field keys should replicate client visit object keys

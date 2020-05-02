@@ -37,7 +37,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
 
     //let st_time_buffer_obj = util.decodeHourMinFromTime(st_time - util.VISIT_BUFFER_TIME);
     let st_time_buffer_obj = util.decodeHourMinFromTime(st_time);   //dont look before requested time
-    let en_time_buffer_obj = util.decodeHourMinFromTime(en_time);
+    let en_time_buffer_obj = util.decodeHourMinFromTime(en_time + util.TIMETABLE_SEARCH_BUFFER);
 
     console.log("Decoded Time: Start: " + st_time_obj.toString() + " End: " + en_time_obj.toString());
     console.log("Decoded Buffer Time: Start: " + st_time_buffer_obj.toString() + " End: " + en_time_buffer_obj.toString());
