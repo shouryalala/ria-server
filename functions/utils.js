@@ -222,7 +222,7 @@ var getEncodedVisitEndTimeFromSlotRef = function(slotRef){
         }
     }        
     console.log(header,`Final Hour,Slot: ${maxHr}, ${maxSlot}`);
-    let finalCode = maxHr*3600 + maxSlot*10*60;
+    let finalCode = maxHr*3600 + (maxSlot+1)*10*60;    //visit end is till END of slot -> thus add 10 more mins
     console.log(header,`Final Code: ${finalCode}`);
     return finalCode;
 }
