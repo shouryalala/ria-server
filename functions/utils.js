@@ -34,6 +34,7 @@ const SUBCOLN_USER_ACTIVITY = "activity";
 const DOC_USER_FCM_TOKEN = "client_token";
 const DOC_ACTIVITY_STATUS = "status";
 const DOC_USER_STATS = "statistics";
+const FLD_USER_STATUS_CHANGE_REASON = "change_reason";
 //Firebase db fields
 const AST_TOKEN = "client_token";
 const AST_TOKEN_TIMESTAMP = "ct_update_tmstmp";
@@ -123,15 +124,15 @@ class DecodedTime {
 var getServiceDuration = function(service, bhk) {    
     bhk = (bhk===undefined||bhk===null||bhk<1||bhk>SERVICE_CLEANING_DURATION_BHK.length)?3:bhk;   //default to 3 if NA
     switch(service) {
-        case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION_BHK[bhk+1];        
+        case SERVICE_CLEANING: return SERVICE_CLEANING_DURATION_BHK[bhk-1];        
         case SERVICE_UTENSILS: return SERVICE_UTENSILS_DURATION;
-        case SERVICE_DUSTING: return SERVICE_DUSTING_DURATION_BHK[bhk+1];
-        case SERVICE_CLEANING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
-        case SERVICE_CLEANING_DUSTING: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_DUSTING_DURATION_BHK[bhk+1];
-        case SERVICE_DUSTING_UTENSILS: return SERVICE_DUSTING_DURATION_BHK[bhk+1] + SERVICE_UTENSILS_DURATION + SERVICE_BUFFER;
-        case SERVICE_CLEANING_DUSTING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + 
-                    SERVICE_DUSTING_DURATION_BHK[bhk+1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
-        default: return SERVICE_CLEANING_DURATION_BHK[bhk+1];
+        case SERVICE_DUSTING: return SERVICE_DUSTING_DURATION_BHK[bhk-1];
+        case SERVICE_CLEANING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk-1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
+        case SERVICE_CLEANING_DUSTING: return SERVICE_CLEANING_DURATION_BHK[bhk-1] + SERVICE_BUFFER + SERVICE_DUSTING_DURATION_BHK[bhk-1];
+        case SERVICE_DUSTING_UTENSILS: return SERVICE_DUSTING_DURATION_BHK[bhk-1] + SERVICE_UTENSILS_DURATION + SERVICE_BUFFER;
+        case SERVICE_CLEANING_DUSTING_UTENSILS: return SERVICE_CLEANING_DURATION_BHK[bhk-1] + SERVICE_BUFFER + 
+                    SERVICE_DUSTING_DURATION_BHK[bhk-1] + SERVICE_BUFFER + SERVICE_UTENSILS_DURATION;
+        default: return SERVICE_CLEANING_DURATION_BHK[bhk-1];
     }
 }
 
@@ -482,7 +483,7 @@ var isRequestValid = function(requestObj) {
  * - notify user
  */
 var closeUserRequest = async function(userId, code) {
-    console.log("CLOSEUSERREQUEST::INVOKED");
+    console.log("CLOSEUSERREQUEST::INVOKED",userId,code);
     if(userId === undefined || code === undefined) {
         console.error('Parameted undefined..skipping');
         return;
@@ -511,6 +512,7 @@ var closeUserRequest = async function(userId, code) {
             visit_status: VISIT_STATUS_NONE,
             modified_time: fieldValue.serverTimestamp()
         };
+        uPayload[FLD_USER_STATUS_CHANGE_REASON] = (code === NO_AVAILABLE_AST_CODE)?NO_AVAILABLE_AST_MSG:ERROR_ENCOUNTERED_MSG;
         console.log('Transaction write: Setting user status to Default');
         await transaction.set(userStatusRef, uPayload, {merge: false});
         return Promise.resolve('User status updated successfully');
@@ -659,7 +661,7 @@ module.exports = {
     AST_TOKEN,AST_TOKEN_TIMESTAMP,ARRAY_AST,DOC_ONLINE_ASTS,DOC_AST_ACTIVE_REQUEST,DOCFIELD_REQUEST_REF,DOCFIELD_TIMESTAMP,REQ_STATUS_ASSIGNED,REQ_STATUS_UNASSIGNED,AST_RESPONSE_NIL,AST_RESPONSE_ACCEPT,
     AST_RESPONSE_REJECT,COMMAND_WORK_REQUEST,COMMAND_REQUEST_CONFIRMED,COMMAND_VISIT_ONGOING,COMMAND_VISIT_COMPLETED,COMMAND_VISIT_CANCELLED,SERVICE_CLEANING,SERVICE_DUSTING,SERVICE_UTENSILS,SERVICE_CHORE,
     SERVICE_CLEANING_UTENSILS,SERVICE_CLEANING_DUSTING,SERVICE_DUSTING_UTENSILS,SERVICE_CLEANING_DUSTING_UTENSILS,VISIT_STATUS_FAILED,FLD_CANCLD_BY_USER,FLD_CANCLD_BY_AST,TIMETABLE_SEARCH_BUFFER,
-    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,VISIT_BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,
+    VISIT_STATUS_NONE,VISIT_STATUS_CANCELLED,VISIT_STATUS_COMPLETED,VISIT_STATUS_ONGOING,VISIT_STATUS_UPCOMING,TOTAL_SLOTS,VISIT_BUFFER_TIME,ALPHA_ZONE_ID,REQUEST_STATUS_CHECK_TIMEOUT,FLD_USER_STATUS_CHANGE_REASON,
     dummy1,dummy2,dummy3,sortSlotsByHour,DecodedTime,getServiceDuration,sendDataPayload,sendUserPayload,sendAssistantPayload,decodeHourMinFromTime,getEncodedVisitStartTimeFromSlotRef,getEncodedVisitEndTimeFromSlotRef,
     verifyTime,getTTFieldName,getTTPathName,isRequestDateValid,isRequestValid,NO_AVAILABLE_AST_CODE,ERROR_CODE,SUCCESS_CODE,closeUserRequest,updateAssistantRating,getISTDate,VOICE_NOTIFICATION_TTS 
 }

@@ -302,8 +302,8 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
 var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) {
     const payload = {
         notification: {
-            title: 'Firestore Request',
-            body: 'Click to confirm',
+            title: 'काम आया है',
+            body: 'जल्दी यहां देखे',
         //    click_action: 'launch_request'
         },
         data: {
@@ -326,7 +326,7 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
     };
 
     try{
-        let voiceFlag = await voiceutil.sendVoiceNotification(astId);
+        let voiceFlag = true;//await voiceutil.sendVoiceNotification(astId); //TODO add back later
         let response = await util.sendAssistantPayload(astId, payload, util.COMMAND_WORK_REQUEST);
         console.log("Snet Voice Notification: ", voiceFlag, "Send Data Payload: ", (response===util.SUCCESS_CODE));
         if(response === util.SUCCESS_CODE) return true;
