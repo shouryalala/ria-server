@@ -65,6 +65,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     let flag = false;
     let rObj = null;
     //while((k_right+num_slots) <= res.slotLib.length || (k_left >= 0)) {
+    let astSearchOrder = defineAssistantSearchOrder(res.assistantLib);
     while((k_right+num_slots) <= res.slotLib.length) {
         let tAssistantId;            
         if((k_right + num_slots) <= res.slotLib.length) {
@@ -118,6 +119,37 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
         return util.NO_AVAILABLE_AST_CODE;
     }
     return rObj; 
+}
+
+/**
+ * DEFINEASSISTANTSEARCHORDER
+ * @param {*} assistants 
+ * 
+ * return shuffled array indices
+ * eg array [1,0,2,3]
+ */
+let defineAssistantSearchOrder = function(assistants) {    
+    if(assistants === undefined || assistants.length === 0 || assistants.length === 1) return [0];
+    var shuffleArray = [];
+    for(let i=0; i<assistants.length; i++) shuffleArray.push(i);
+
+    //now shuffle array
+    let currentIndex = shuffleArray.length, temporaryValue, randomIndex;
+
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+
+        // Pick a remaining element...
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+
+        // And swap it with the current element.
+        temporaryValue = shuffleArray[currentIndex];
+        shuffleArray[currentIndex] = shuffleArray[randomIndex];
+        shuffleArray[randomIndex] = temporaryValue;
+    }
+    console.log("Search order for this request: ", shuffleArray.toString());
+    return shuffleArray;
 }
 
 /**
