@@ -2,6 +2,7 @@ const util = require('./utils');
 const schedular =  require('./schedular');
 const {db, fieldValue} = require('./admin');
 const voiceutil = require('./voice_notification');
+const paymentsModule = require('./payments');
 
 /**
  * USERREQUESTHANDLER
@@ -202,6 +203,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     }    
     let st_time = util.VISIT_BUFFER_TIME + parseInt(requestObj.req_time);   //static buffer time added. Bad logic?
     let en_time = st_time + util.getServiceDuration(requestObj.service, requestObj.bhk);
+    let cost = paymentsModule.getServiceCharge(requestObj.service, requestObj.society_id, requestObj.req_time); //calculate cost for service
     let astSlotDetails;
     //1. Find an available assistant
     try{
@@ -253,6 +255,10 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
             asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
             slotRef: slotRef
         };
+        if(requestObj.cost === undefined || requestObj.cost !== cost){
+            console.log(`Adding cost: ${cost} to request: ${requestPath._id}`);
+            payloadA['cost'] = cost;
+        }
         astBatch.set(pathRef, payloadA, {merge: true});
 
         let astActivityRef = db.collection(util.COLN_ASSISTANTS).doc(astSlotDetails._id).collection(util.SUBCOLN_ASSISTANT_ACTIVITY).doc(util.DOC_AST_ACTIVE_REQUEST);

@@ -69,7 +69,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
     while((k_right+num_slots) <= res.slotLib.length) {
         let tAssistantId;            
         if((k_right + num_slots) <= res.slotLib.length) {
-            tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_right,num_slots);
+            tAssistantId = getFreeAssistantFromWindow(res.timetable,res.assistantLib,k_right,num_slots,astSearchOrder);
             if(tAssistantId !== null) {                    
                 console.log("Found free assistant: " + tAssistantId + " in window: " + k_right);
                 console.log("Slot: " + k_right + ", Decoded:: (" + res.slotLib[k_right].getHours() + "," +  res.slotLib[k_right].getMins() + ")");
@@ -129,6 +129,7 @@ exports.getAvailableAssistant = async function(society_id, monthId, date, st_tim
  * eg array [1,0,2,3]
  */
 let defineAssistantSearchOrder = function(assistants) {    
+    console.log("::DEFINEASSISTANTSEARCHORDER::INVOKED");
     if(assistants === undefined || assistants.length === 0 || assistants.length === 1) return [0];
     var shuffleArray = [];
     for(let i=0; i<assistants.length; i++) shuffleArray.push(i);
@@ -332,25 +333,26 @@ let getCurrentlyAvailableAsts = async function(society_id) {
  * @param {string[]} assistants
  * @param {number} index 
  * @param {number} slots 
+ * @param {number[]} astOrder   
  * GETFREEASSISTANTFROMWINDOW
  * Goes through the 'timetable' starting from 'index' to see if any assistant from 'assistants' is available
- * 
+ * astOrder: order in which to iterate through assistant while searching
  * return Obj = {assistant/null}
  */
-let getFreeAssistantFromWindow = function(timetable, assistants, index, slots) {
-    console.log("::getFreeAssistantFromWindow::INVOKED::Params{timetable:..,assistants:..,index: " + index + ", slots: " + slots + "}");
+let getFreeAssistantFromWindow = function(timetable, assistants, index, slots, astOrder) {
+    console.log("::getFreeAssistantFromWindow::INVOKED::Params{timetable:..,assistants:..,index: " + index + ", slots: " + slots + "astOrder: " + astOrder + "}");
     let i,j;    
-    for(i=0; i<assistants.length; i++) {
+    for(i=0; i<astOrder.length; i++) {
         let flag = true;
         for(j=index; j<index+slots; j++) {
-            if(!timetable[j][i]) {
+            if(!timetable[j][astOrder[i]]) {
                 //slot is not free, window fails.
                 flag = false;
             }
         }
         if(flag === true) {
             console.log("::getFreeAssistantFromWindow: Found Free Assistant: " + i);
-            return assistants[i];
+            return assistants[astOrder[i]];
         }
     }
     console.log("::getFreeAssistantFromWindow: Didnt find a free Assistant in this window.");
