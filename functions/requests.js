@@ -203,7 +203,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     }    
     let st_time = util.VISIT_BUFFER_TIME + parseInt(requestObj.req_time);   //static buffer time added. Bad logic?
     let en_time = st_time + util.getServiceDuration(requestObj.service, requestObj.bhk);
-    let cost = paymentsModule.getServiceCharge(requestObj.service, requestObj.society_id, requestObj.req_time); //calculate cost for service
+    let cost = paymentsModule.getServiceCharge(requestObj.service, requestObj.society_id, requestObj.req_time) + 0.01; //calculate cost for service
     let astSlotDetails;
     //1. Find an available assistant
     try{
@@ -241,8 +241,8 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
     //3. Send a request to the assistant
     let assistantJobFlag = true;     //maintains a check of if sending request failed or updating assistant assignment failed.TBU in reverting in case fails
     //let timeCde = String(astSlotDetails.freeSlotLib[0].encode());
-    let timeCde = String(util.getEncodedVisitStartTimeFromSlotRef(slotRef));
-    assistantJobFlag = sendAssistantRequest(astSlotDetails._id,requestPath._id,requestObj,timeCde);    
+    let timeCde = util.getEncodedVisitStartTimeFromSlotRef(slotRef);
+    assistantJobFlag = sendAssistantRequest(astSlotDetails._id,requestPath._id,requestObj,timeCde);        
 
     //4. Update request assignee and assistant activity
     if(assistantJobFlag){
@@ -253,7 +253,8 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
         let payloadA = {
             asn_id: astSlotDetails._id,
             asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
-            slotRef: slotRef
+            slotRef: slotRef,
+            ast_req_st_time: timeCde
         };
         if(requestObj.cost === undefined || requestObj.cost !== cost){
             console.log(`Adding cost: ${cost} to request: ${requestPath._id}`);
@@ -268,11 +269,6 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
         astBatch.set(astActivityRef,payloadB,{merge:false});
 
         try{
-            // await pathRef.set({
-            //     asn_id: astSlotDetails._id,
-            //     asn_response: util.AST_RESPONSE_NIL,     //Can be set by client
-            //     slotRef: slotRef
-            // }, {merge: true});
             await astBatch.commit();
 
             setTimeout(() => {
@@ -306,6 +302,7 @@ var requestAssistantService = async function(requestPath, requestObj, exceptions
  * @param {String} timeCde 
  */
 var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) {
+    console.log('TTL PARAMETER: ', `${Math.round(util.REQUEST_STATUS_CHECK_TIMEOUT/1000)}s`);
     const payload = {
         notification: {
             title: 'काम आया है',
@@ -316,17 +313,17 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
             rId: requestId,
             service: requestObj.service,                            
             date: String(requestObj.date),
-            time: timeCde, 
+            ast_req_st_time: String(timeCde), 
             address: requestObj.address,
             society_id: requestObj.society_id,
             //Command: COMMAND_WORK_REQUEST
         },
         android:{
             priority:'high',
-            ttl:6000,
+            ttl:`${Math.round(util.REQUEST_STATUS_CHECK_TIMEOUT/1000)}s`,
             notification:{
                 click_action:'.MainActivity',
-                sound: 'nangs.mp3'
+                sound: 'request_alert.mp3'
             }
         },      
     };
@@ -402,78 +399,6 @@ var checkRequestStatus = async function(requestPath, assId) {
 }
 
 /**
- * CHECKREQUESTSTATUS
- * @param {yearId: string, monthId: string, _id: string} requestPath
- * @param {string} assId (assistant ID)
- * 
- * method checks whether assistant has responded to request or not after waiting for a period of time. 
- * -if not, restart request handling process
- */
-var checkRequestStatus2 = async function(requestPath, assId) {
-    console.log("::checkRequestStatus::INVOKED");
-    let docSnapshot;
-    try{
-        //TODO CONVERT TO TRANSACTION
-        docSnapshot = await db.collection(util.COLN_REQUESTS).doc(requestPath.yearId).collection(requestPath.monthId).doc(requestPath._id).get();
-        const aDoc = docSnapshot.data();
-        if(aDoc.asn_id === undefined && aDoc.asn_response === undefined) {
-            console.log("Request has no assignee yet. Prolly no assistant was available");
-            return util.SUCCESS_CODE;
-        }
-        if(aDoc.asn_id !== assId) {
-            console.log("checkRequestStatus for RequestId: " + requestPath._id + ", AssistantId: " + assId + " outdated. Request reassigned since.");
-            //nothing to be done here
-            return util.SUCCESS_CODE;
-        }
-        else {
-            if(aDoc.asn_response === util.AST_RESPONSE_ACCEPT){
-                //TODO maybe verify if status is assigned yet or not. not reqd
-                console.log("checkRequestStatus verified request: " + requestPath._id + " All in order.");
-                return util.SUCCESS_CODE;
-                
-            }else if(aDoc.asn_response === util.AST_RESPONSE_REJECT){
-                //should never happen. corner case when request is in process of being rerouted and gets caught by this method
-                console.error("Request: " + requestPath._id + " has been rejected by Assistant: " + assId + " but hasnt been rerouted.", 
-                    new Error("Found Request sitting in REJECTED state: " + JSON.stringify(requestPath) + " " + assId));
-                return util.ERROR_CODE;
-            }else if(aDoc.asn_response === util.AST_RESPONSE_NIL){
-                //the assigned assistant is still the same and the her response is stil nil
-                //log analytics
-                console.log("Request: " + requestPath._id + " hasnt been responded to by assistant: " + assId + " Required to be rerouted");                
-                let rPayload = {
-                    noresponse: fieldValue.arrayUnion(requestPath._id)
-                };
-                let docKey = `${requestPath.yearId}-${requestPath.monthId}-NORES`;  //ex: 2020-JAN-NORES
-                let aRef = db.collection(util.COLN_ASSISTANTS).doc(assId).collection(util.SUBCOLN_ASSISTANT_ANALYTICS).doc(docKey);
-                let astAnalyticsBlk = {
-                    ref: aRef,
-                    payload: rPayload
-                };
-
-                let flag;
-                try{
-                    //rerouteRequest fail/success, + requestAssistantService fail/success captured here
-                    flag = await rerouteRequest(requestPath, aDoc);
-                }catch(e) {
-                    flag = util.ERROR_CODE;
-                    console.error("RerouteRequest method failed: ",e, 
-                        new Error("RerouteRequest method failed: " + e.toString()));                    
-                }
-
-                if(flag === util.ERROR_CODE || flag === util.NO_AVAILABLE_AST_CODE) {
-                    await util.closeUserRequest(aDoc.user_id, flag);
-                }
-                return flag;
-            }
-        }
-    }catch(e) {
-        console.error("Error in retrieving record: ",e,
-             new Error("Couldnt retrieve Request: " + JSON.stringify(requestPath)));
-        return util.ERROR_CODE;
-    }   
-}
-
-/**
  * REROUTEREQUEST
  * @param {yearId: string, monthId: string, _id: string} requestPath 
  * @param {Request Obj} requestObj 
@@ -529,6 +454,7 @@ var rerouteRequest = async function(requestPath, requestObj) {
                 asn_id: fieldValue.delete(),
                 asn_response: util.AST_RESPONSE_NIL,
                 slotRef: fieldValue.delete(),
+                ast_req_st_time: fieldValue.delete(),
                 status: util.REQ_STATUS_UNASSIGNED,
                 rejections: fieldValue.arrayUnion(a_id)
             } 

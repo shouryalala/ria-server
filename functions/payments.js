@@ -1,13 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const {auth} = require('./admin');
+const util = require('./utils');
 
 const app = express();
 app.use(cors({origin: true}));
 
-const BASIC_CX_SERVICE_CHARGE = 40;
-const BASIC_UX_SERVICE_CHARGE = 25;
-const BASIC_DX_SERVICE_CHARGE = 30;
+const BASIC_CX_SERVICE_CHARGE = 40.0;
+const BASIC_UX_SERVICE_CHARGE = 25.0;
+const BASIC_DX_SERVICE_CHARGE = 30.0;
 
 app.get('/', async (req,res) => {    
     console.log('Payments Module:: GETCHARGE INVOKED:');
@@ -38,13 +39,13 @@ var getServiceCharge = (service, socId, reqTime) => {
 
     //Setting a simple service charge calculator for now
     switch(service) {
-        case SERVICE_CLEANING: return BASIC_CX_SERVICE_CHARGE;
-        case SERVICE_UTENSILS: return BASIC_UX_SERVICE_CHARGE;
-        case SERVICE_DUSTING: return BASIC_DX_SERVICE_CHARGE;
-        case SERVICE_CLEANING_UTENSILS: return BASIC_CX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
-        case SERVICE_CLEANING_DUSTING: return BASIC_CX_SERVICE_CHARGE + BASIC_DX_SERVICE_CHARGE;
-        case SERVICE_DUSTING_UTENSILS: return BASIC_DX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
-        case SERVICE_CLEANING_DUSTING_UTENSILS: return BASIC_CX_SERVICE_CHARGE + BASIC_DX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
+        case util.SERVICE_CLEANING: return BASIC_CX_SERVICE_CHARGE;
+        case util.SERVICE_UTENSILS: return BASIC_UX_SERVICE_CHARGE;
+        case util.SERVICE_DUSTING: return BASIC_DX_SERVICE_CHARGE;
+        case util.SERVICE_CLEANING_UTENSILS: return BASIC_CX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
+        case util.SERVICE_CLEANING_DUSTING: return BASIC_CX_SERVICE_CHARGE + BASIC_DX_SERVICE_CHARGE;
+        case util.SERVICE_DUSTING_UTENSILS: return BASIC_DX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
+        case util.SERVICE_CLEANING_DUSTING_UTENSILS: return BASIC_CX_SERVICE_CHARGE + BASIC_DX_SERVICE_CHARGE + BASIC_UX_SERVICE_CHARGE;
         default: return BASIC_DX_SERVICE_CHARGE;
     }
 }
