@@ -320,7 +320,7 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
         },
         android:{
             priority:'high',
-            ttl:`${Math.round(util.REQUEST_STATUS_CHECK_TIMEOUT/1000)}s`,
+            ttl:util.REQUEST_STATUS_CHECK_TIMEOUT,
             notification:{
                 click_action:'.MainActivity',
                 sound: 'request_alert.mp3'
@@ -329,7 +329,7 @@ var sendAssistantRequest = async function(astId,requestId, requestObj, timeCde) 
     };
 
     try{
-        let voiceFlag = true;//await voiceutil.sendVoiceNotification(astId); //TODO add back later
+        let voiceFlag = await voiceutil.sendVoiceNotification(astId); 
         let response = await util.sendAssistantPayload(astId, payload, util.COMMAND_WORK_REQUEST);
         console.log("Snet Voice Notification: ", voiceFlag, "Send Data Payload: ", (response===util.SUCCESS_CODE));
         if(response === util.SUCCESS_CODE) return true;
